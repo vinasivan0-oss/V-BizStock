@@ -15,7 +15,7 @@
 1. Extract the ZIP file.
 2. Open `index.html` or `dashboard.html` in a browser, or use VS Code Live Server.
 3. Use the sidebar to move between the separate pages for Dashboard, Products, Inventory Movements, Sales, Suppliers, and Users.
-4. In Products, use **Add Product** to add a row or **Delete** on a product to remove it from the in-memory demo data. Search and category filtering are also available.
+4. In Sales, add available products to the cart and complete checkout. A completed sale updates stock, adds sale and sale-item records, and records a linked STOCK_OUT inventory movement. In Products, use **Add Product** to add a row or **Delete** on a product to remove it from the in-memory demo data. Search and category filtering are also available.
 
 ## Important database note
 A browser page made with HTML/CSS/JavaScript cannot safely connect directly to a MySQL database. This demo uses JavaScript arrays populated from the sample rows in your SQL dump. Changes are temporary and disappear when the page is refreshed.
@@ -25,4 +25,4 @@ To make it a live system, add a backend API (for example PHP + MySQL on Laragon,
 ## SQL tables represented
 `category`, `product`, `inventory_movement`, `sale`, `sale_item`, `customer`, `supplier`, `product_supplier`, `users`, and `role`.
 
-The pages display the supplied sample records. Adding and deleting products are frontend-only demonstrations; they do not execute database INSERT or DELETE statements.
+The pages display the supplied sample records. Sales, sale items, inventory movements, and their stock changes are saved in browser local storage. Adding and deleting products are frontend-only demonstrations; they do not execute database INSERT or DELETE statements.
