@@ -43,6 +43,9 @@
             <h2>Suppliers</h2>
             <p>Supplier directory and product supply information.</p>
           </div>
+          <button class="primary-btn" id="add-supplier-btn" type="button">
+            ＋ Add Supplier
+          </button>
         </div>
         <div class="panel">
           <div class="table-wrap">
@@ -54,6 +57,7 @@
                   <th>Contact Number</th>
                   <th>Email</th>
                   <th>Address</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="suppliers-table"></tbody>
@@ -61,7 +65,9 @@
           </div>
         </div>
         <div class="panel sales-detail">
-          <h3>Product Suppliers</h3>
+          <div class="cart-heading">
+            <h3>Product Suppliers</h3>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -70,6 +76,7 @@
                   <th>Supplier</th>
                   <th>Supplier Product Code</th>
                   <th>Supply Price</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="product-suppliers-table"></tbody>
@@ -85,6 +92,88 @@
         >
       </footer>
     </main>
-    <script src="script.js"></script>
+    <dialog id="supplier-dialog">
+      <form id="supplier-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Add Supplier</h2>
+            <p>Add a supplier to the directory.</p>
+          </div>
+          <button type="button" class="close-btn" id="close-supplier-dialog">
+            ×
+          </button>
+        </div>
+        <label
+          >Supplier name<input
+            name="supplier_name"
+            required
+            maxlength="150"
+            placeholder="e.g. Northside Wholesale"
+        /></label>
+        <label
+          >Contact number<input
+            name="contact_number"
+            type="tel"
+            maxlength="30"
+            placeholder="e.g. 09123456789"
+        /></label>
+        <label
+          >Email<input
+            name="email"
+            type="email"
+            maxlength="150"
+            placeholder="e.g. contact@supplier.com"
+        /></label>
+        <label
+          >Address<input
+            name="address"
+            maxlength="255"
+            placeholder="Supplier address"
+        /></label>
+        <p id="supplier-form-error" class="form-error"></p>
+        <button class="primary-btn full-btn" type="submit">Save Supplier</button>
+      </form>
+    </dialog>
+    <dialog id="product-supplier-dialog">
+      <form id="product-supplier-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Edit Product Supplier</h2>
+            <p>Update the supplier details for this product.</p>
+          </div>
+          <button
+            type="button"
+            class="close-btn"
+            id="close-product-supplier-dialog"
+          >
+            ×
+          </button>
+        </div>
+        <label
+          >Product<select name="product_id" required></select>
+        </label>
+        <label
+          >Supplier<select name="supplier_id" required></select>
+        </label>
+        <label
+          >Supplier product code<input
+            name="supplier_product_code"
+            required
+            maxlength="100"
+            placeholder="Supplier's product code"
+        /></label>
+        <label
+          >Supply price<input
+            name="supply_price"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+        /></label>
+        <p id="product-supplier-form-error" class="form-error"></p>
+        <button class="primary-btn full-btn" type="submit">Save Changes</button>
+      </form>
+    </dialog>
+    <script src="auth.js"></script>
   </body>
 </html>

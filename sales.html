@@ -64,12 +64,6 @@
         <div class="panel">
           <div class="cart-heading">
             <h3>Cart</h3>
-            <label for="sale-customer">Customer</label>
-            <select id="sale-customer">
-              <option value="0">Walk-in customer</option>
-              <option value="1">Customer1</option>
-              <option value="2">Customer2</option>
-            </select>
           </div>
           <div class="table-wrap">
             <table>
@@ -93,31 +87,17 @@
             </button>
           </div>
         </div>
-        <div class="section-toolbar">
-          <div>
-            <h2>Sales Records</h2>
-            <p>Review completed customer transactions.</p>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Sale ID</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th>Staff</th>
-                  <th>Discount</th>
-                  <th>Total Amount</th>
-                </tr>
-              </thead>
-              <tbody id="sales-table"></tbody>
-            </table>
-          </div>
-        </div>
         <div class="panel sales-detail">
-          <h3>Sale Items</h3>
+          <div class="cart-heading">
+            <h3>Sale Items</h3>
+            <button
+              class="delete-btn"
+              id="clear-sale-items-btn"
+              type="button"
+            >
+              Clear History
+            </button>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -128,6 +108,7 @@
                   <th>Unit Price</th>
                   <th>Discount</th>
                   <th>Subtotal</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="sale-items-table"></tbody>
@@ -143,6 +124,6 @@
         >
       </footer>
     </main>
-    <script src="script.js"></script>
+    <script src="auth.js"></script>
   </body>
 </html>

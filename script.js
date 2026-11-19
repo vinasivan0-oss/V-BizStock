@@ -9,6 +9,7 @@ const products = [
     sku: "BEV-001",
     unit_price: 20,
     cost_price: 12,
+    status: "Active",
     reorder_level: 20,
     stock_quantity: 100,
   },
@@ -19,6 +20,7 @@ const products = [
     sku: "BEV-002",
     unit_price: 25,
     cost_price: 15,
+    status: "Active",
     reorder_level: 20,
     stock_quantity: 15,
   },
@@ -29,24 +31,9 @@ const products = [
     sku: "SNK-001",
     unit_price: 35,
     cost_price: 22,
+    status: "Active",
     reorder_level: 15,
     stock_quantity: 10,
-  },
-];
-const customers = [
-  {
-    customer_id: 1,
-    customer_name: "Customer1",
-    contact_number: "—",
-    email: "—",
-    address: "—",
-  },
-  {
-    customer_id: 2,
-    customer_name: "Customer2",
-    contact_number: "09123456789",
-    email: "abc@example.com",
-    address: "Naga City",
   },
 ];
 const suppliers = [
@@ -65,24 +52,7 @@ const suppliers = [
     address: "Legazpi City",
   },
 ];
-const users = [
-  {
-    user_id: 1,
-    first_name: "Ivan",
-    last_name: "Viñas",
-    username: "admin",
-    role: "Owner",
-    is_active: 1,
-  },
-  {
-    user_id: 2,
-    first_name: "Juan",
-    last_name: "Dela Cruz",
-    username: "staff1",
-    role: "Staff",
-    is_active: 1,
-  },
-];
+let users = window.getAppUsers();
 const movements = [
   [1, 1, 1, "STOCK_IN", 50, "2026-09-01 00:00:00", "PO-001"],
   [2, 2, 1, "STOCK_IN", 40, "2026-09-01 00:30:00", "PO-002"],
@@ -92,10 +62,8 @@ const movements = [
   [6, 3, 2, "STOCK_OUT", 4, "2026-09-03 03:30:00", "SALE-002"],
   [7, 1, 1, "STOCK_IN", 25, "2026-09-05 00:45:00", "PO-004"],
   [8, 2, 2, "STOCK_OUT", 6, "2026-09-06 06:10:00", "SALE-003"],
-  [9, 3, 1, "ADJUSTMENT", 2, "2026-09-07 08:00:00", "ADJ-001"],
   [10, 1, 2, "STOCK_OUT", 8, "2026-09-08 09:20:00", "SALE-004"],
   [11, 2, 1, "STOCK_IN", 20, "2026-09-10 01:00:00", "PO-005"],
-  [12, 3, 2, "RETURN", 2, "2026-09-11 05:30:00", "RET-001"],
 ].map(
   ([
     movement_id,
@@ -180,10 +148,21 @@ const productSuppliers = [
   },
 ];
 const transactionStorageKey = "smallbiz-sales-transactions";
+const productStorageKey = "smallbiz-products";
+const supplierStorageKey = "smallbiz-supplier-data";
 const cart = new Map();
 const addedSales = [];
 const addedSaleItems = [];
 const addedMovements = [];
+const deletedMovementIds = new Set();
+const deletedSaleItemKeys = new Set();
+const saleItemKey = (item) => `${item.sale_id}:${item.product_id}`;
+const nextMovementId = () =>
+  Math.max(
+    ...movements.map((movement) => movement.movement_id),
+    ...deletedMovementIds,
+    0,
+  ) + 1;
 function restoreTransactions() {
   try {
     const saved = localStorage.getItem(transactionStorageKey);
@@ -199,9 +178,34 @@ function restoreTransactions() {
       throw new Error("Saved sales data has an unexpected format.");
     }
 
+    const savedDeletedMovementIds =
+      state.deletedMovementIds === undefined ? [] : state.deletedMovementIds;
+    if (
+      !Array.isArray(savedDeletedMovementIds) ||
+      savedDeletedMovementIds.some((movementId) => !Number.isInteger(movementId))
+    ) {
+      throw new Error("Saved movement deletion data is invalid.");
+    }
+    savedDeletedMovementIds.forEach((movementId) =>
+      deletedMovementIds.add(movementId),
+    );
+    const savedDeletedSaleItemKeys =
+      state.deletedSaleItemKeys === undefined ? [] : state.deletedSaleItemKeys;
+    if (
+      !Array.isArray(savedDeletedSaleItemKeys) ||
+      savedDeletedSaleItemKeys.some((itemKey) => typeof itemKey !== "string")
+    ) {
+      throw new Error("Saved sale item deletion data is invalid.");
+    }
+    savedDeletedSaleItemKeys.forEach((itemKey) =>
+      deletedSaleItemKeys.add(itemKey),
+    );
     state.stock.forEach(({ product_id, stock_quantity }) => {
-      const product = products.find((item) => item.product_id === product_id);
-      if (!product || !Number.isInteger(stock_quantity) || stock_quantity < 0) {
+      if (
+        !Number.isInteger(product_id) ||
+        !Number.isInteger(stock_quantity) ||
+        stock_quantity < 0
+      ) {
         throw new Error("Saved stock data is invalid.");
       }
     });
@@ -210,20 +214,45 @@ function restoreTransactions() {
         throw new Error("Saved sale data is invalid.");
     });
     state.stock.forEach(({ product_id, stock_quantity }) => {
-      products.find((item) => item.product_id === product_id).stock_quantity =
-        stock_quantity;
+      const product = products.find((item) => item.product_id === product_id);
+      if (product) product.stock_quantity = stock_quantity;
     });
+    movements.splice(
+      0,
+      movements.length,
+      ...movements.filter(
+        (movement) => !deletedMovementIds.has(movement.movement_id),
+      ),
+    );
+    const savedMovements = state.movements.filter(
+      (movement) => !deletedMovementIds.has(movement.movement_id),
+    );
+    const savedSaleItems = state.saleItems.filter(
+      (item) => !deletedSaleItemKeys.has(saleItemKey(item)),
+    );
+    saleItems.splice(
+      0,
+      saleItems.length,
+      ...saleItems.filter((item) => !deletedSaleItemKeys.has(saleItemKey(item))),
+    );
     sales.push(...state.sales);
-    saleItems.push(...state.saleItems);
-    movements.push(...state.movements);
+    saleItems.push(...savedSaleItems);
+    movements.push(...savedMovements);
     addedSales.push(...state.sales);
-    addedSaleItems.push(...state.saleItems);
-    addedMovements.push(...state.movements);
+    addedSaleItems.push(...savedSaleItems);
+    addedMovements.push(...savedMovements);
   } catch (error) {
     window.alert(`Could not load saved sales data: ${error.message}`);
   }
 }
-function saveTransactions(nextSales, nextSaleItems, nextMovements, stock) {
+function saveTransactions(
+  nextSales,
+  nextSaleItems,
+  nextMovements,
+  stock,
+  nextDeletedMovementIds = deletedMovementIds,
+  nextDeletedSaleItemKeys = deletedSaleItemKeys,
+) {
   localStorage.setItem(
     transactionStorageKey,
     JSON.stringify({
@@ -231,8 +260,130 @@ function saveTransactions(nextSales, nextSaleItems, nextMovements, stock) {
       saleItems: nextSaleItems,
       movements: nextMovements,
       stock,
+      deletedMovementIds: [...nextDeletedMovementIds],
+      deletedSaleItemKeys: [...nextDeletedSaleItemKeys],
     }),
   );
+}
+function saveProducts(nextProducts = products) {
+  localStorage.setItem(productStorageKey, JSON.stringify(nextProducts));
+}
+function restoreProducts() {
+  try {
+    const saved = localStorage.getItem(productStorageKey);
+    if (!saved) return;
+
+    const state = JSON.parse(saved);
+    const productIds = new Set();
+    if (!Array.isArray(state)) {
+      throw new Error("Saved product data is invalid.");
+    }
+
+    const invalidProduct = state.some((product) => {
+      if (
+        !product ||
+        !Number.isInteger(product.product_id) ||
+        productIds.has(product.product_id)
+      ) {
+        return true;
+      }
+      productIds.add(product.product_id);
+      return (
+        !Number.isInteger(product.category_id) ||
+        !categories[product.category_id] ||
+        typeof product.product_name !== "string" ||
+        typeof product.sku !== "string" ||
+        !Number.isFinite(product.unit_price) ||
+        product.unit_price < 0 ||
+        !Number.isFinite(product.cost_price) ||
+        product.cost_price < 0 ||
+        !Number.isInteger(product.stock_quantity) ||
+        product.stock_quantity < 0 ||
+        !Number.isInteger(product.reorder_level) ||
+        product.reorder_level < 0 ||
+        !["Active", "Inactive"].includes(product.status)
+      );
+    });
+    if (invalidProduct) throw new Error("Saved product data is invalid.");
+
+    products.splice(0, products.length, ...state);
+  } catch (error) {
+    window.alert(`Could not load saved product data: ${error.message}`);
+  }
+}
+function saveSupplierData(nextSuppliers = suppliers, nextProductSuppliers = productSuppliers) {
+  localStorage.setItem(
+    supplierStorageKey,
+    JSON.stringify({
+      suppliers: nextSuppliers,
+      productSuppliers: nextProductSuppliers,
+    }),
+  );
+}
+function restoreSupplierData() {
+  try {
+    const saved = localStorage.getItem(supplierStorageKey);
+    if (!saved) return;
+
+    const state = JSON.parse(saved);
+    if (
+      !state ||
+      !Array.isArray(state.suppliers) ||
+      !Array.isArray(state.productSuppliers)
+    ) {
+      throw new Error("Saved supplier data has an unexpected format.");
+    }
+
+    const supplierIds = new Set();
+    const invalidSupplier = state.suppliers.some((supplier) => {
+      if (
+        !supplier ||
+        !Number.isInteger(supplier.supplier_id) ||
+        supplierIds.has(supplier.supplier_id)
+      ) {
+        return true;
+      }
+      supplierIds.add(supplier.supplier_id);
+      return (
+        typeof supplier.supplier_name !== "string" ||
+        !supplier.supplier_name.trim() ||
+        typeof supplier.contact_number !== "string" ||
+        typeof supplier.email !== "string" ||
+        typeof supplier.address !== "string"
+      );
+    });
+    const productSupplierKeys = new Set();
+    const invalidProductSupplier = state.productSuppliers.some((entry) => {
+      if (
+        !entry ||
+        !Number.isInteger(entry.product_id) ||
+        !Number.isInteger(entry.supplier_id) ||
+        !supplierIds.has(entry.supplier_id)
+      ) {
+        return true;
+      }
+      const key = `${entry.product_id}:${entry.supplier_id}`;
+      if (productSupplierKeys.has(key)) return true;
+      productSupplierKeys.add(key);
+      return (
+        typeof entry.supplier_product_code !== "string" ||
+        !Number.isFinite(entry.supply_price) ||
+        entry.supply_price < 0
+      );
+    });
+    if (invalidSupplier || invalidProductSupplier) {
+      throw new Error("Saved supplier data is invalid.");
+    }
+
+    suppliers.splice(0, suppliers.length, ...state.suppliers);
+    productSuppliers.splice(
+      0,
+      productSuppliers.length,
+      ...state.productSuppliers,
+    );
+  } catch (error) {
+    window.alert(`Could not load saved supplier data: ${error.message}`);
+  }
 }
 const money = (n) =>
   "₱" +
@@ -244,10 +395,8 @@ const productName = (id) =>
   products.find((p) => p.product_id === id)?.product_name || "Unknown";
 const userName = (id) => {
   const u = users.find((x) => x.user_id === id);
-  return u ? u.first_name + " " + u.last_name : "Unknown";
+  return u ? u.first_name + " " + u.last_name : `User #${id}`;
 };
-const customerName = (id) =>
-  customers.find((c) => c.customer_id === id)?.customer_name || "Walk-in";
 const supplierName = (id) =>
   suppliers.find((s) => s.supplier_id === id)?.supplier_name || "Unknown";
 const esc = (s) =>
@@ -305,7 +454,7 @@ function renderProducts() {
     rows
       .map(
         (p) =>
-          `<tr><td>${esc(p.product_name)}</td><td>${esc(p.sku)}</td><td>${categories[p.category_id]}</td><td>${money(p.unit_price)}</td><td>${money(p.cost_price)}</td><td>${p.stock_quantity}</td><td><span class="pill ${p.stock_quantity <= p.reorder_level ? "low" : "good"}">${p.stock_quantity <= p.reorder_level ? "Low stock" : "In stock"}</span></td><td><button class="delete-btn" type="button" data-delete-product="${p.product_id}" aria-label="Delete ${esc(p.product_name)}">Delete</button></td></tr>`,
+          `<tr><td>${esc(p.product_name)}</td><td>${esc(p.sku)}</td><td>${categories[p.category_id]}</td><td>${money(p.unit_price)}</td><td>${money(p.cost_price)}</td><td>${p.stock_quantity}</td><td><span class="pill ${p.status === "Inactive" ? "inactive" : "good"}">${esc(p.status || "Active")}</span>${p.stock_quantity === 0 ? ' <span class="pill out-of-stock">Out of stock</span>' : p.stock_quantity <= p.reorder_level ? ' <span class="pill low">Low stock</span>' : ""}</td><td><button class="primary-btn update-btn" type="button" data-update-product="${p.product_id}" aria-label="Update ${esc(p.product_name)}">Update</button> <button class="delete-btn" type="button" data-delete-product="${p.product_id}" aria-label="Delete ${esc(p.product_name)}">Delete</button></td></tr>`,
       )
       .join("") ||
     '<tr><td colspan="8">No products match your search.</td></tr>';
@@ -318,7 +467,101 @@ function deleteProduct(productId) {
   if (!window.confirm(`Delete "${product.product_name}"? This cannot be undone.`))
     return;
 
+  const updatedProducts = products.filter((item) => item.product_id !== productId);
+  saveProducts(updatedProducts);
   products.splice(productIndex, 1);
+  renderProducts();
+}
+function openProductUpdate(productId) {
+  const product = products.find((item) => item.product_id === productId);
+  if (!product) return;
+
+  const form = document.getElementById("product-update-form");
+  form.elements.unit_price.value = product.unit_price;
+  form.elements.cost_price.value = product.cost_price;
+  form.elements.stock_quantity.value = product.stock_quantity;
+  form.elements.status.value = product.status || "Active";
+  form.dataset.productId = productId;
+  document.getElementById("update-product-name").textContent =
+    `Update details for ${product.product_name}.`;
+  document.getElementById("update-form-error").textContent = "";
+  document.getElementById("product-update-dialog").showModal();
+}
+function updateProduct(form) {
+  const productId = Number(form.dataset.productId);
+  const product = products.find((item) => item.product_id === productId);
+  if (!product) return;
+
+  const data = Object.fromEntries(new FormData(form));
+  const unitPrice = Number(data.unit_price);
+  const costPrice = Number(data.cost_price);
+  const stockQuantity = Number(data.stock_quantity);
+  if (
+    !Number.isFinite(unitPrice) ||
+    unitPrice < 0 ||
+    !Number.isFinite(costPrice) ||
+    costPrice < 0 ||
+    !Number.isInteger(stockQuantity) ||
+    stockQuantity < 0
+  ) {
+    document.getElementById("update-form-error").textContent =
+      "Enter valid prices and a whole, non-negative stock quantity.";
+    return;
+  }
+
+  const updatedProduct = {
+    ...product,
+    unit_price: unitPrice,
+    cost_price: costPrice,
+    stock_quantity: stockQuantity,
+    status: data.status,
+  };
+  const updatedProducts = products.map((item) =>
+    item.product_id === productId ? updatedProduct : item,
+  );
+  const stockChange = stockQuantity - product.stock_quantity;
+  let movement = null;
+  if (stockChange !== 0) {
+    const now = new Date();
+    const movementDate = [
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+      `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`,
+    ].join(" ");
+    movement = {
+      movement_id: nextMovementId(),
+      product_id: productId,
+      user_id: window.authContext.user.user_id,
+      movement_type: stockChange > 0 ? "STOCK_IN" : "STOCK_OUT",
+      quantity: Math.abs(stockChange),
+      movement_date: movementDate,
+      reference_number: `PRODUCT-UPDATE-${productId}`,
+    };
+  }
+  try {
+    saveProducts(updatedProducts);
+    if (movement) {
+      saveTransactions(
+        [...addedSales],
+        [...addedSaleItems],
+        [...addedMovements, movement],
+        updatedProducts.map(({ product_id, stock_quantity }) => ({
+          product_id,
+          stock_quantity,
+        })),
+      );
+    }
+  } catch (error) {
+    document.getElementById("update-form-error").textContent =
+      `Could not save product changes: ${error.message}`;
+    return;
+  }
+
+  Object.assign(product, updatedProduct);
+  if (movement) {
+    movements.push(movement);
+    addedMovements.push(movement);
+  }
+  document.getElementById("product-update-dialog").close();
   renderProducts();
 }
 function renderMovements() {
@@ -328,9 +571,79 @@ function renderMovements() {
     .filter((m) => !filter || m.movement_type === filter)
     .map(
       (m) =>
-        `<tr><td>${m.movement_id}</td><td>${esc(productName(m.product_id))}</td><td><span class="pill ${m.movement_type.toLowerCase()}">${m.movement_type.replace("_", " ")}</span></td><td>${m.movement_type === "STOCK_OUT" ? "−" : m.movement_type === "STOCK_IN" || m.movement_type === "RETURN" ? "+" : ""}${m.quantity} units</td><td>${esc(userName(m.user_id))}</td><td>${m.movement_date}</td><td>${esc(m.reference_number)}</td></tr>`,
+      `<tr><td>${m.movement_id}</td><td>${esc(productName(m.product_id))}</td><td><span class="pill ${m.movement_type.toLowerCase()}">${m.movement_type.replace("_", " ")}</span></td><td>${m.movement_type === "STOCK_OUT" ? "−" : m.movement_type === "STOCK_IN" ? "+" : ""}${m.quantity} units</td><td>${esc(userName(m.user_id))}</td><td>${m.movement_date}</td><td>${esc(m.reference_number)}</td><td><button class="delete-btn" type="button" data-delete-movement="${m.movement_id}" aria-label="Delete movement ${m.movement_id}">Delete</button></td></tr>`,
     )
     .join("");
+  const clearButton = document.getElementById("clear-movements-btn");
+  if (clearButton) clearButton.disabled = movements.length === 0;
+}
+function removeMovementHistory(movementIds) {
+  const idsToDelete = new Set(
+    movementIds.filter((movementId) =>
+    movements.some((movement) => movement.movement_id === movementId),
+    ),
+  );
+  if (idsToDelete.size === 0) return;
+
+  const nextDeletedMovementIds = new Set(deletedMovementIds);
+  idsToDelete.forEach((movementId) =>
+    nextDeletedMovementIds.add(movementId),
+  );
+  const nextAddedMovements = addedMovements.filter(
+    (movement) => !idsToDelete.has(movement.movement_id),
+  );
+  const stock = products.map(({ product_id, stock_quantity }) => ({
+    product_id,
+    stock_quantity,
+  }));
+  try {
+    saveTransactions(
+    [...addedSales],
+    [...addedSaleItems],
+    nextAddedMovements,
+    stock,
+    nextDeletedMovementIds,
+    );
+  } catch (error) {
+    window.alert(`Could not delete movement history: ${error.message}`);
+    return;
+  }
+
+  idsToDelete.forEach((movementId) =>
+    deletedMovementIds.add(movementId),
+  );
+  movements.splice(
+    0,
+    movements.length,
+    ...movements.filter(
+    (movement) => !idsToDelete.has(movement.movement_id),
+    ),
+  );
+  addedMovements.splice(0, addedMovements.length, ...nextAddedMovements);
+  renderMovements();
+}
+function deleteMovement(movementId) {
+  if (!movements.some((movement) => movement.movement_id === movementId))
+    return;
+  if (
+    !window.confirm(
+    `Delete movement #${movementId} from history? This will not change stock.`,
+    )
+  ) {
+    return;
+  }
+  removeMovementHistory([movementId]);
+}
+function clearMovementHistory() {
+  if (movements.length === 0) return;
+  if (
+    !window.confirm(
+    `Delete all ${movements.length} movement records from history? This will not change stock.`,
+    )
+  ) {
+    return;
+  }
+  removeMovementHistory(movements.map((movement) => movement.movement_id));
 }
 function renderSalesCart() {
   const productTable = document.getElementById("sales-products-table");
@@ -338,6 +651,7 @@ function renderSalesCart() {
 
   productTable.innerHTML =
     products
+      .filter((product) => product.status !== "Inactive")
       .map(
         (product) =>
           `<tr><td>${esc(product.product_name)}</td><td>${money(product.unit_price)}</td><td>${product.stock_quantity}</td><td><input class="cart-quantity" type="number" min="1" max="${product.stock_quantity}" value="1" aria-label="Quantity of ${esc(product.product_name)}" ${product.stock_quantity === 0 ? "disabled" : ""}></td><td><button class="primary-btn add-to-cart-btn" type="button" data-add-to-cart="${product.product_id}" ${product.stock_quantity === 0 ? "disabled" : ""}>Add to Cart</button></td></tr>`,
@@ -365,6 +679,7 @@ function addToCart(productId, quantity) {
   const currentQuantity = cart.get(productId)?.quantity || 0;
   if (
     !product ||
+    product.status === "Inactive" ||
     !Number.isInteger(quantity) ||
     quantity < 1 ||
     currentQuantity + quantity > product.stock_quantity
@@ -388,7 +703,11 @@ function completeSale() {
 
   for (const [productId, item] of items) {
     const product = products.find((entry) => entry.product_id === productId);
-    if (!product || item.quantity > product.stock_quantity) {
+    if (
+      !product ||
+      product.status === "Inactive" ||
+      item.quantity > product.stock_quantity
+    ) {
       message.textContent =
         "Stock changed while this cart was open. Update the cart quantities and try again.";
       renderSalesCart();
@@ -397,7 +716,7 @@ function completeSale() {
   }
 
   const lastReferencedSaleId = movements.reduce((lastId, movement) => {
-    const match = movement.reference_number.match(/^SALE-(\d+)$/);
+    const match = String(movement.reference_number || "").match(/^SALE-(\d+)$/);
     return match ? Math.max(lastId, Number(match[1])) : lastId;
   }, 0);
   const saleId =
@@ -407,15 +726,19 @@ function completeSale() {
       0,
     ) + 1;
   const reference = `SALE-${String(saleId).padStart(3, "0")}`;
-  const saleDate = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const now = new Date();
+  const saleDate = [
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`,
+  ].join(" ");
   const total = items.reduce(
     (sum, [, item]) => sum + item.quantity * item.unit_price,
     0,
   );
   const sale = {
     sale_id: saleId,
-    user_id: 2,
-    customer_id: Number(document.getElementById("sale-customer").value),
+    user_id: window.authContext.user.user_id,
+    customer_id: 0,
     sale_date: saleDate,
     discount: 0,
     total_amount: total,
@@ -430,11 +753,9 @@ function completeSale() {
   }));
   const newMovements = items.map(([productId, item], index) => ({
     movement_id:
-      Math.max(...movements.map((movement) => movement.movement_id), 0) +
-      index +
-      1,
+      nextMovementId() + index,
     product_id: productId,
-    user_id: 2,
+    user_id: window.authContext.user.user_id,
     movement_type: "STOCK_OUT",
     quantity: item.quantity,
     movement_date: saleDate,
@@ -453,6 +774,14 @@ function completeSale() {
       [...addedSaleItems, ...newSaleItems],
       [...addedMovements, ...newMovements],
       stock,
+    );
+    saveProducts(
+      products.map((product) => ({
+        ...product,
+        stock_quantity: stock.find(
+          (item) => item.product_id === product.product_id,
+        ).stock_quantity,
+      })),
     );
   } catch (error) {
     message.textContent = `Could not save this sale: ${error.message}`;
@@ -475,28 +804,27 @@ function completeSale() {
   renderOtherTables();
 }
 function renderOtherTables() {
-  const salesTable = document.getElementById("sales-table");
-  if (salesTable)
-    salesTable.innerHTML = sales
-      .map(
-        (s) =>
-          `<tr><td>#${s.sale_id}</td><td>${s.sale_date}</td><td>${esc(customerName(s.customer_id))}</td><td>${esc(userName(s.user_id))}</td><td>${money(s.discount)}</td><td><strong>${money(s.total_amount)}</strong></td></tr>`,
-      )
-      .join("");
   const saleItemsTable = document.getElementById("sale-items-table");
-  if (saleItemsTable)
-    saleItemsTable.innerHTML = saleItems
-      .map(
-        (i) =>
-          `<tr><td>#${i.sale_id}</td><td>${esc(productName(i.product_id))}</td><td>${i.quantity}</td><td>${money(i.unit_price)}</td><td>${money(i.discount)}</td><td>${money(i.subtotal)}</td></tr>`,
-      )
-      .join("");
+  if (saleItemsTable) {
+    saleItemsTable.innerHTML =
+      saleItems
+        .map(
+          (i) =>
+            `<tr><td>#${i.sale_id}</td><td>${esc(productName(i.product_id))}</td><td>${i.quantity}</td><td>${money(i.unit_price)}</td><td>${money(i.discount)}</td><td>${money(i.subtotal)}</td><td><button class="delete-btn" type="button" data-delete-sale-item="${i.sale_id}" data-product-id="${i.product_id}" aria-label="Delete ${esc(productName(i.product_id))} from sale ${i.sale_id}">Delete</button></td></tr>`,
+        )
+        .join("") || '<tr><td colspan="7">No sale item history.</td></tr>';
+    const clearSaleItemsButton = document.getElementById(
+      "clear-sale-items-btn",
+    );
+    if (clearSaleItemsButton)
+      clearSaleItemsButton.disabled = saleItems.length === 0;
+  }
   const suppliersTable = document.getElementById("suppliers-table");
   if (suppliersTable)
     suppliersTable.innerHTML = suppliers
       .map(
         (s) =>
-          `<tr><td>${s.supplier_id}</td><td>${esc(s.supplier_name)}</td><td>${esc(s.contact_number)}</td><td>${esc(s.email)}</td><td>${esc(s.address)}</td></tr>`,
+          `<tr><td>${s.supplier_id}</td><td>${esc(s.supplier_name)}</td><td>${esc(s.contact_number)}</td><td>${esc(s.email)}</td><td>${esc(s.address)}</td><td><button class="delete-btn" type="button" data-delete-supplier="${s.supplier_id}" aria-label="Delete supplier ${esc(s.supplier_name)}">Delete</button></td></tr>`,
       )
       .join("");
   const productSuppliersTable = document.getElementById(
@@ -506,7 +834,7 @@ function renderOtherTables() {
     productSuppliersTable.innerHTML = productSuppliers
       .map(
         (x) =>
-          `<tr><td>${esc(productName(x.product_id))}</td><td>${esc(supplierName(x.supplier_id))}</td><td>${esc(x.supplier_product_code)}</td><td>${money(x.supply_price)}</td></tr>`,
+          `<tr><td>${esc(productName(x.product_id))}</td><td>${esc(supplierName(x.supplier_id))}</td><td>${esc(x.supplier_product_code)}</td><td>${money(x.supply_price)}</td><td><button class="primary-btn update-btn" type="button" data-edit-product-supplier="${x.product_id}" data-supplier-id="${x.supplier_id}" aria-label="Edit supplier for ${esc(productName(x.product_id))}">Edit</button> <button class="delete-btn" type="button" data-delete-product-supplier="${x.product_id}" data-supplier-id="${x.supplier_id}" aria-label="Delete supplier link for ${esc(productName(x.product_id))}">Delete</button></td></tr>`,
       )
       .join("");
   const usersTable = document.getElementById("users-table");
@@ -514,23 +842,370 @@ function renderOtherTables() {
     usersTable.innerHTML = users
       .map(
         (u) =>
-          `<tr><td>${u.user_id}</td><td>${esc(u.first_name + " " + u.last_name)}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td><span class="pill good">${u.is_active ? "Active" : "Inactive"}</span></td></tr>`,
+          `<tr><td>${u.user_id}</td><td>${esc(u.first_name + " " + u.last_name)}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td><span class="pill ${u.is_active ? "good" : "inactive"}">${u.is_active ? "Active" : "Inactive"}</span></td><td>${esc(window.passwordStatusFor(u))}</td><td><button class="primary-btn update-btn" type="button" data-edit-user="${u.user_id}">Edit</button> <button class="delete-btn" type="button" data-delete-user="${u.user_id}">Delete</button></td></tr>`,
       )
       .join("");
+}
+function openProductSupplierEditor(productId, supplierId) {
+  const mappingIndex = productSuppliers.findIndex(
+    (entry) =>
+      entry.product_id === productId && entry.supplier_id === supplierId,
+  );
+  if (mappingIndex === -1) return;
+
+  const mapping = productSuppliers[mappingIndex];
+  const form = document.getElementById("product-supplier-form");
+  const productSelect = form.elements.product_id;
+  const supplierSelect = form.elements.supplier_id;
+  productSelect.innerHTML = products
+    .map(
+      (product) =>
+        `<option value="${product.product_id}">${esc(product.product_name)}</option>`,
+    )
+    .join("");
+  if (!products.some((product) => product.product_id === mapping.product_id)) {
+    productSelect.insertAdjacentHTML(
+      "afterbegin",
+      `<option value="${mapping.product_id}">${esc(productName(mapping.product_id))}</option>`,
+    );
+  }
+  supplierSelect.innerHTML = suppliers
+    .map(
+      (supplier) =>
+        `<option value="${supplier.supplier_id}">${esc(supplier.supplier_name)}</option>`,
+    )
+    .join("");
+  productSelect.value = mapping.product_id;
+  supplierSelect.value = mapping.supplier_id;
+  form.elements.supplier_product_code.value = mapping.supplier_product_code;
+  form.elements.supply_price.value = mapping.supply_price;
+  form.dataset.mappingIndex = mappingIndex;
+  document.getElementById("product-supplier-form-error").textContent = "";
+  document.getElementById("product-supplier-dialog").showModal();
+}
+function addSupplier(form) {
+  const data = Object.fromEntries(new FormData(form));
+  const supplierNameInput = data.supplier_name.trim();
+  if (
+    suppliers.some(
+      (supplier) =>
+        supplier.supplier_name.toLowerCase() === supplierNameInput.toLowerCase(),
+    )
+  ) {
+    document.getElementById("supplier-form-error").textContent =
+      "That supplier already exists.";
+    return;
+  }
+
+  const supplier = {
+    supplier_id: Math.max(...suppliers.map((entry) => entry.supplier_id), 0) + 1,
+    supplier_name: supplierNameInput,
+    contact_number: data.contact_number.trim(),
+    email: data.email.trim(),
+    address: data.address.trim(),
+  };
+  try {
+    saveSupplierData([...suppliers, supplier]);
+  } catch (error) {
+    document.getElementById("supplier-form-error").textContent =
+      `Could not save supplier: ${error.message}`;
+    return;
+  }
+
+  suppliers.push(supplier);
+  form.reset();
+  document.getElementById("supplier-dialog").close();
+  renderOtherTables();
+}
+function updateProductSupplier(form) {
+  const mappingIndex = Number(form.dataset.mappingIndex);
+  const currentMapping = productSuppliers[mappingIndex];
+  if (!currentMapping) return;
+
+  const data = Object.fromEntries(new FormData(form));
+  const productId = Number(data.product_id);
+  const supplierId = Number(data.supplier_id);
+  const supplyPrice = Number(data.supply_price);
+  const supplierProductCode = data.supplier_product_code.trim();
+  if (
+    (!products.some((product) => product.product_id === productId) &&
+      productId !== currentMapping.product_id) ||
+    !suppliers.some((supplier) => supplier.supplier_id === supplierId) ||
+    !supplierProductCode ||
+    !Number.isFinite(supplyPrice) ||
+    supplyPrice < 0
+  ) {
+    document.getElementById("product-supplier-form-error").textContent =
+      "Enter a valid product, supplier, product code, and non-negative price.";
+    return;
+  }
+  if (
+    productSuppliers.some(
+      (entry, index) =>
+        index !== mappingIndex &&
+        entry.product_id === productId &&
+        entry.supplier_id === supplierId,
+    )
+  ) {
+    document.getElementById("product-supplier-form-error").textContent =
+      "That product is already linked to this supplier.";
+    return;
+  }
+
+  const updatedMapping = {
+    product_id: productId,
+    supplier_id: supplierId,
+    supplier_product_code: supplierProductCode,
+    supply_price: supplyPrice,
+  };
+  const updatedMappings = productSuppliers.map((entry, index) =>
+    index === mappingIndex ? updatedMapping : entry,
+  );
+  try {
+    saveSupplierData(suppliers, updatedMappings);
+  } catch (error) {
+    document.getElementById("product-supplier-form-error").textContent =
+      `Could not save product supplier changes: ${error.message}`;
+    return;
+  }
+
+  Object.assign(currentMapping, updatedMapping);
+  document.getElementById("product-supplier-dialog").close();
+  renderOtherTables();
+}
+function deleteSupplier(supplierId) {
+  const supplierIndex = suppliers.findIndex(
+    (supplier) => supplier.supplier_id === supplierId,
+  );
+  if (supplierIndex === -1) return;
+
+  const supplier = suppliers[supplierIndex];
+  const linkedMappings = productSuppliers.filter(
+    (entry) => entry.supplier_id === supplierId,
+  );
+  const mappingMessage = linkedMappings.length
+    ? ` and its ${linkedMappings.length} product supplier link(s)`
+    : "";
+  if (
+    !window.confirm(
+      `Delete "${supplier.supplier_name}"${mappingMessage}? This cannot be undone.`,
+    )
+  ) {
+    return;
+  }
+
+  const nextSuppliers = suppliers.filter(
+    (entry) => entry.supplier_id !== supplierId,
+  );
+  const nextProductSuppliers = productSuppliers.filter(
+    (entry) => entry.supplier_id !== supplierId,
+  );
+  try {
+    saveSupplierData(nextSuppliers, nextProductSuppliers);
+  } catch (error) {
+    window.alert(`Could not delete supplier: ${error.message}`);
+    return;
+  }
+
+  suppliers.splice(supplierIndex, 1);
+  productSuppliers.splice(
+    0,
+    productSuppliers.length,
+    ...nextProductSuppliers,
+  );
+  renderOtherTables();
+}
+function deleteProductSupplier(productId, supplierId) {
+  const mappingIndex = productSuppliers.findIndex(
+    (entry) =>
+      entry.product_id === productId && entry.supplier_id === supplierId,
+  );
+  if (mappingIndex === -1) return;
+
+  if (
+    !window.confirm(
+      `Delete the supplier link for ${productName(productId)}? This will not change product stock.`,
+    )
+  ) {
+    return;
+  }
+
+  const nextProductSuppliers = productSuppliers.filter(
+    (entry) =>
+      !(entry.product_id === productId && entry.supplier_id === supplierId),
+  );
+  try {
+    saveSupplierData(suppliers, nextProductSuppliers);
+  } catch (error) {
+    window.alert(`Could not delete product supplier link: ${error.message}`);
+    return;
+  }
+
+  productSuppliers.splice(
+    0,
+    productSuppliers.length,
+    ...nextProductSuppliers,
+  );
+  renderOtherTables();
+}
+function removeSaleItemHistory(itemsToRemove) {
+  const keysToDelete = new Set(
+    itemsToRemove
+      .map(saleItemKey)
+      .filter((itemKey) =>
+        saleItems.some((item) => saleItemKey(item) === itemKey),
+      ),
+  );
+  if (keysToDelete.size === 0) return;
+
+  const nextDeletedSaleItemKeys = new Set(deletedSaleItemKeys);
+  keysToDelete.forEach((itemKey) => nextDeletedSaleItemKeys.add(itemKey));
+  const nextAddedSaleItems = addedSaleItems.filter(
+    (item) => !keysToDelete.has(saleItemKey(item)),
+  );
+  const stock = products.map(({ product_id, stock_quantity }) => ({
+    product_id,
+    stock_quantity,
+  }));
+  try {
+    saveTransactions(
+      [...addedSales],
+      nextAddedSaleItems,
+      [...addedMovements],
+      stock,
+      deletedMovementIds,
+      nextDeletedSaleItemKeys,
+    );
+  } catch (error) {
+    window.alert(`Could not delete sale item history: ${error.message}`);
+    return;
+  }
+
+  keysToDelete.forEach((itemKey) => deletedSaleItemKeys.add(itemKey));
+  saleItems.splice(
+    0,
+    saleItems.length,
+    ...saleItems.filter((item) => !keysToDelete.has(saleItemKey(item))),
+  );
+  addedSaleItems.splice(0, addedSaleItems.length, ...nextAddedSaleItems);
+  renderOtherTables();
+}
+function deleteSaleItem(saleId, productId) {
+  const item = saleItems.find(
+    (saleItem) =>
+      saleItem.sale_id === saleId && saleItem.product_id === productId,
+  );
+  if (!item) return;
+  if (
+    !window.confirm(
+      `Delete ${productName(productId)} from sale #${saleId} history? This will not change stock or sales totals.`,
+    )
+  ) {
+    return;
+  }
+  removeSaleItemHistory([item]);
+}
+function clearSaleItemHistory() {
+  if (saleItems.length === 0) return;
+  if (
+    !window.confirm(
+      `Delete all ${saleItems.length} sale item records from history? This will not change stock or sales totals.`,
+    )
+  ) {
+    return;
+  }
+  removeSaleItemHistory([...saleItems]);
+}
+const supplierDialog = document.getElementById("supplier-dialog");
+if (supplierDialog) {
+  const supplierForm = document.getElementById("supplier-form");
+  document
+    .getElementById("add-supplier-btn")
+    .addEventListener("click", () => {
+      supplierForm.reset();
+      document.getElementById("supplier-form-error").textContent = "";
+      supplierDialog.showModal();
+    });
+  document
+    .getElementById("close-supplier-dialog")
+    .addEventListener("click", () => supplierDialog.close());
+  supplierForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addSupplier(event.currentTarget);
+  });
+}
+const productSupplierDialog = document.getElementById("product-supplier-dialog");
+if (productSupplierDialog) {
+  document
+    .getElementById("close-product-supplier-dialog")
+    .addEventListener("click", () => productSupplierDialog.close());
+  document
+    .getElementById("product-supplier-form")
+    .addEventListener("submit", (event) => {
+      event.preventDefault();
+      updateProductSupplier(event.currentTarget);
+    });
+}
+const productSuppliersTable = document.getElementById(
+  "product-suppliers-table",
+);
+if (productSuppliersTable) {
+  productSuppliersTable.addEventListener("click", (event) => {
+    const editButton = event.target.closest(
+      "button[data-edit-product-supplier]",
+    );
+    const deleteButton = event.target.closest(
+      "button[data-delete-product-supplier]",
+    );
+    if (editButton) {
+      openProductSupplierEditor(
+        Number(editButton.dataset.editProductSupplier),
+        Number(editButton.dataset.supplierId),
+      );
+    }
+    if (deleteButton) {
+      deleteProductSupplier(
+        Number(deleteButton.dataset.deleteProductSupplier),
+        Number(deleteButton.dataset.supplierId),
+      );
+    }
+  });
+}
+const suppliersDirectoryTable = document.getElementById("suppliers-table");
+if (suppliersDirectoryTable) {
+  suppliersDirectoryTable.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("button[data-delete-supplier]");
+    if (deleteButton)
+      deleteSupplier(Number(deleteButton.dataset.deleteSupplier));
+  });
 }
 const productSearch = document.getElementById("product-search");
 if (productSearch) productSearch.addEventListener("input", renderProducts);
 const productsTable = document.getElementById("products-table");
 if (productsTable) {
   productsTable.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-delete-product]");
-    if (button) deleteProduct(Number(button.dataset.deleteProduct));
+    const updateButton = event.target.closest("button[data-update-product]");
+    const deleteButton = event.target.closest("button[data-delete-product]");
+    if (updateButton)
+      openProductUpdate(Number(updateButton.dataset.updateProduct));
+    if (deleteButton) deleteProduct(Number(deleteButton.dataset.deleteProduct));
   });
 }
 const categoryFilter = document.getElementById("category-filter");
 if (categoryFilter) categoryFilter.addEventListener("change", renderProducts);
 const movementFilter = document.getElementById("movement-filter");
 if (movementFilter) movementFilter.addEventListener("change", renderMovements);
+const clearMovementsButton = document.getElementById("clear-movements-btn");
+if (clearMovementsButton)
+  clearMovementsButton.addEventListener("click", clearMovementHistory);
+const movementsTable = document.getElementById("movements-table");
+if (movementsTable) {
+  movementsTable.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("button[data-delete-movement]");
+    if (deleteButton)
+      deleteMovement(Number(deleteButton.dataset.deleteMovement));
+  });
+}
 const salesProductsTable = document.getElementById("sales-products-table");
 if (salesProductsTable) {
   salesProductsTable.addEventListener("click", (event) => {
@@ -560,6 +1235,21 @@ if (cartTable) {
     .getElementById("checkout-btn")
     .addEventListener("click", completeSale);
 }
+const saleItemsHistoryTable = document.getElementById("sale-items-table");
+if (saleItemsHistoryTable) {
+  saleItemsHistoryTable.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("button[data-delete-sale-item]");
+    if (deleteButton) {
+      deleteSaleItem(
+        Number(deleteButton.dataset.deleteSaleItem),
+        Number(deleteButton.dataset.productId),
+      );
+    }
+  });
+  document
+    .getElementById("clear-sale-items-btn")
+    .addEventListener("click", clearSaleItemHistory);
+}
 const dialog = document.getElementById("product-dialog");
 if (dialog) {
   document.getElementById("add-product-btn").addEventListener("click", () => {
@@ -578,25 +1268,53 @@ if (dialog) {
         "That SKU already exists. Please use a unique SKU.";
       return;
     }
-    products.push({
+    const newProduct = {
       product_id: Math.max(...products.map((p) => p.product_id), 0) + 1,
       category_id: Number(data.category_id),
       product_name: data.product_name.trim(),
       sku,
       unit_price: Number(data.unit_price),
       cost_price: Number(data.cost_price),
+      status: "Active",
       stock_quantity: Number(data.stock_quantity),
       reorder_level: Number(data.reorder_level),
-    });
+    };
+    try {
+      saveProducts([...products, newProduct]);
+    } catch (error) {
+      document.getElementById("form-error").textContent =
+        `Could not save product: ${error.message}`;
+      return;
+    }
+    products.push(newProduct);
     e.currentTarget.reset();
     dialog.close();
     renderProducts();
   });
 }
+const productUpdateDialog = document.getElementById("product-update-dialog");
+if (productUpdateDialog) {
+  document
+    .getElementById("close-update-dialog")
+    .addEventListener("click", () => productUpdateDialog.close());
+  document
+    .getElementById("product-update-form")
+    .addEventListener("submit", (event) => {
+      event.preventDefault();
+      updateProduct(event.currentTarget);
+    });
+}
 restoreTransactions();
+restoreProducts();
+restoreSupplierData();
 const page = document.body.dataset.page;
 if (page === "dashboard") renderDashboard();
 if (page === "products") renderProducts();
 if (page === "movements") renderMovements();
 if (page === "sales") renderSalesCart();
 renderOtherTables();
+window.renderOtherTables = renderOtherTables;
+window.refreshUsersTable = () => {
+  users = window.getAppUsers();
+  renderOtherTables();
+};

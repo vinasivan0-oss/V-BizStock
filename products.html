@@ -79,12 +79,7 @@
           </div>
         </div>
       </section>
-      <footer>
-        SmallBiz Sales & Inventory
-        <span
-          >Frontend demonstration · Connect a backend for live database
-          operations</span
-        >
+
       </footer>
     </main>
     <dialog id="product-dialog">
@@ -157,6 +152,59 @@
         <button class="primary-btn full-btn" type="submit">Save Product</button>
       </form>
     </dialog>
-    <script src="script.js"></script>
+    <dialog id="product-update-dialog">
+      <form id="product-update-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Update Product</h2>
+            <p id="update-product-name"></p>
+          </div>
+          <button
+            type="button"
+            class="close-btn"
+            id="close-update-dialog"
+          >
+            ×
+          </button>
+        </div>
+        <div class="form-row">
+          <label
+            >Unit price<input
+              name="unit_price"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+          /></label>
+          <label
+            >Cost price<input
+              name="cost_price"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+          /></label>
+        </div>
+        <div class="form-row">
+          <label
+            >Stock quantity<input
+              name="stock_quantity"
+              type="number"
+              min="0"
+              step="1"
+              required
+          /></label>
+          <label
+            >Status<select name="status" required>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+        <p id="update-form-error" class="form-error"></p>
+        <button class="primary-btn full-btn" type="submit">Save Changes</button>
+      </form>
+    </dialog>
+    <script src="auth.js"></script>
   </body>
 </html>
