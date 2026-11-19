@@ -44,6 +44,9 @@
             <h2>System Users</h2>
             <p>Registered accounts and assigned roles.</p>
           </div>
+          <button class="primary-btn" id="add-user-btn" type="button">
+            Add User
+          </button>
         </div>
         <div class="panel">
           <div class="table-wrap">
@@ -55,6 +58,8 @@
                   <th>Username</th>
                   <th>Role</th>
                   <th>Status</th>
+                  <th>Password</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="users-table"></tbody>
@@ -62,6 +67,76 @@
           </div>
         </div>
       </section>
+      <dialog id="user-dialog">
+        <form id="user-form">
+          <div class="dialog-heading">
+            <div>
+              <h2 id="user-dialog-title">Add user</h2>
+              <p>IDs are generated automatically and cannot be changed.</p>
+            </div>
+            <button
+              class="close-btn"
+              id="close-user-dialog"
+              type="button"
+              aria-label="Close dialog"
+            >
+              ×
+            </button>
+          </div>
+          <label>
+            ID
+            <input name="user_id" type="number" min="1" readonly required />
+          </label>
+          <div class="form-row">
+            <label>
+              First name
+              <input name="first_name" type="text" maxlength="60" required />
+            </label>
+            <label>
+              Last name
+              <input name="last_name" type="text" maxlength="60" required />
+            </label>
+          </div>
+          <label>
+            Username
+            <input name="username" type="text" maxlength="40" autocomplete="username" required />
+          </label>
+          <div class="form-row">
+            <label>
+              Role
+              <select name="role" required>
+                <option value="Admin">Admin</option>
+                <option value="Staff">Staff</option>
+              </select>
+            </label>
+            <label>
+              Status
+              <select name="is_active" required>
+                <option value="1">Active</option>
+                <option value="0">Inactive</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Password <span id="user-password-hint">Required for new users</span>
+            <input
+              name="password"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <label>
+            Confirm password
+            <input
+              name="confirm_password"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <p id="user-form-error" class="form-error" role="alert"></p>
+          <button class="primary-btn full-btn" type="submit">Save User</button>
+        </form>
+      </dialog>
       <footer>
         SmallBiz Sales & Inventory
         <span
@@ -70,6 +145,6 @@
         >
       </footer>
     </main>
-    <script src="script.js"></script>
+    <script src="auth.js"></script>
   </body>
 </html>
