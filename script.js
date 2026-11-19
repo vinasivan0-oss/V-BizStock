@@ -179,6 +179,61 @@ const productSuppliers = [
     supply_price: 22,
   },
 ];
+const transactionStorageKey = "smallbiz-sales-transactions";
+const cart = new Map();
+const addedSales = [];
+const addedSaleItems = [];
+const addedMovements = [];
+function restoreTransactions() {
+  try {
+    const saved = localStorage.getItem(transactionStorageKey);
+    if (!saved) return;
+
+    const state = JSON.parse(saved);
+    if (
+      !Array.isArray(state.sales) ||
+      !Array.isArray(state.saleItems) ||
+      !Array.isArray(state.movements) ||
+      !Array.isArray(state.stock)
+    ) {
+      throw new Error("Saved sales data has an unexpected format.");
+    }
+
+    state.stock.forEach(({ product_id, stock_quantity }) => {
+      const product = products.find((item) => item.product_id === product_id);
+      if (!product || !Number.isInteger(stock_quantity) || stock_quantity < 0) {
+        throw new Error("Saved stock data is invalid.");
+      }
+    });
+    state.sales.forEach((sale) => {
+      if (!Number.isInteger(sale.sale_id) || !Number.isFinite(sale.total_amount))
+        throw new Error("Saved sale data is invalid.");
+    });
+    state.stock.forEach(({ product_id, stock_quantity }) => {
+      products.find((item) => item.product_id === product_id).stock_quantity =
+        stock_quantity;
+    });
+    sales.push(...state.sales);
+    saleItems.push(...state.saleItems);
+    movements.push(...state.movements);
+    addedSales.push(...state.sales);
+    addedSaleItems.push(...state.saleItems);
+    addedMovements.push(...state.movements);
+  } catch (error) {
+    window.alert(`Could not load saved sales data: ${error.message}`);
+  }
+}
+function saveTransactions(nextSales, nextSaleItems, nextMovements, stock) {
+  localStorage.setItem(
+    transactionStorageKey,
+    JSON.stringify({
+      sales: nextSales,
+      saleItems: nextSaleItems,
+      movements: nextMovements,
+      stock,
+    }),
+  );
+}
 const money = (n) =>
   "₱" +
   Number(n).toLocaleString("en-PH", {
@@ -273,9 +328,151 @@ function renderMovements() {
     .filter((m) => !filter || m.movement_type === filter)
     .map(
       (m) =>
-        `<tr><td>${m.movement_id}</td><td>${esc(productName(m.product_id))}</td><td><span class="pill ${m.movement_type.toLowerCase()}">${m.movement_type.replace("_", " ")}</span></td><td>${m.quantity}</td><td>${esc(userName(m.user_id))}</td><td>${m.movement_date}</td><td>${esc(m.reference_number)}</td></tr>`,
+        `<tr><td>${m.movement_id}</td><td>${esc(productName(m.product_id))}</td><td><span class="pill ${m.movement_type.toLowerCase()}">${m.movement_type.replace("_", " ")}</span></td><td>${m.movement_type === "STOCK_OUT" ? "−" : m.movement_type === "STOCK_IN" || m.movement_type === "RETURN" ? "+" : ""}${m.quantity} units</td><td>${esc(userName(m.user_id))}</td><td>${m.movement_date}</td><td>${esc(m.reference_number)}</td></tr>`,
     )
     .join("");
+}
+function renderSalesCart() {
+  const productTable = document.getElementById("sales-products-table");
+  if (!productTable) return;
+
+  productTable.innerHTML =
+    products
+      .map(
+        (product) =>
+          `<tr><td>${esc(product.product_name)}</td><td>${money(product.unit_price)}</td><td>${product.stock_quantity}</td><td><input class="cart-quantity" type="number" min="1" max="${product.stock_quantity}" value="1" aria-label="Quantity of ${esc(product.product_name)}" ${product.stock_quantity === 0 ? "disabled" : ""}></td><td><button class="primary-btn add-to-cart-btn" type="button" data-add-to-cart="${product.product_id}" ${product.stock_quantity === 0 ? "disabled" : ""}>Add to Cart</button></td></tr>`,
+      )
+      .join("") || '<tr><td colspan="5">No products available.</td></tr>';
+
+  const cartTable = document.getElementById("cart-table");
+  cartTable.innerHTML =
+    [...cart.entries()]
+      .map(([productId, item]) => {
+        const product = products.find((entry) => entry.product_id === productId);
+        return `<tr><td>${esc(product.product_name)}</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(item.quantity * item.unit_price)}</td><td><button class="delete-btn" type="button" data-remove-from-cart="${productId}">Remove</button></td></tr>`;
+      })
+      .join("") || '<tr><td colspan="5">Your cart is empty.</td></tr>';
+
+  const total = [...cart.values()].reduce(
+    (sum, item) => sum + item.quantity * item.unit_price,
+    0,
+  );
+  document.getElementById("cart-total").textContent = money(total);
+  document.getElementById("checkout-btn").disabled = cart.size === 0;
+}
+function addToCart(productId, quantity) {
+  const product = products.find((item) => item.product_id === productId);
+  const currentQuantity = cart.get(productId)?.quantity || 0;
+  if (
+    !product ||
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    currentQuantity + quantity > product.stock_quantity
+  ) {
+    document.getElementById("cart-message").textContent =
+      "Enter a valid quantity that does not exceed available stock.";
+    return;
+  }
+
+  cart.set(productId, {
+    quantity: currentQuantity + quantity,
+    unit_price: product.unit_price,
+  });
+  document.getElementById("cart-message").textContent = "";
+  renderSalesCart();
+}
+function completeSale() {
+  const message = document.getElementById("cart-message");
+  const items = [...cart.entries()];
+  if (!items.length) return;
+
+  for (const [productId, item] of items) {
+    const product = products.find((entry) => entry.product_id === productId);
+    if (!product || item.quantity > product.stock_quantity) {
+      message.textContent =
+        "Stock changed while this cart was open. Update the cart quantities and try again.";
+      renderSalesCart();
+      return;
+    }
+  }
+
+  const lastReferencedSaleId = movements.reduce((lastId, movement) => {
+    const match = movement.reference_number.match(/^SALE-(\d+)$/);
+    return match ? Math.max(lastId, Number(match[1])) : lastId;
+  }, 0);
+  const saleId =
+    Math.max(
+      ...sales.map((sale) => sale.sale_id),
+      lastReferencedSaleId,
+      0,
+    ) + 1;
+  const reference = `SALE-${String(saleId).padStart(3, "0")}`;
+  const saleDate = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const total = items.reduce(
+    (sum, [, item]) => sum + item.quantity * item.unit_price,
+    0,
+  );
+  const sale = {
+    sale_id: saleId,
+    user_id: 2,
+    customer_id: Number(document.getElementById("sale-customer").value),
+    sale_date: saleDate,
+    discount: 0,
+    total_amount: total,
+  };
+  const newSaleItems = items.map(([productId, item]) => ({
+    sale_id: saleId,
+    product_id: productId,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    discount: 0,
+    subtotal: item.quantity * item.unit_price,
+  }));
+  const newMovements = items.map(([productId, item], index) => ({
+    movement_id:
+      Math.max(...movements.map((movement) => movement.movement_id), 0) +
+      index +
+      1,
+    product_id: productId,
+    user_id: 2,
+    movement_type: "STOCK_OUT",
+    quantity: item.quantity,
+    movement_date: saleDate,
+    reference_number: reference,
+  }));
+  const stock = products.map((product) => ({
+    product_id: product.product_id,
+    stock_quantity:
+      product.stock_quantity -
+      (cart.get(product.product_id)?.quantity || 0),
+  }));
+
+  try {
+    saveTransactions(
+      [...addedSales, sale],
+      [...addedSaleItems, ...newSaleItems],
+      [...addedMovements, ...newMovements],
+      stock,
+    );
+  } catch (error) {
+    message.textContent = `Could not save this sale: ${error.message}`;
+    return;
+  }
+
+  sales.push(sale);
+  saleItems.push(...newSaleItems);
+  movements.push(...newMovements);
+  addedSales.push(sale);
+  addedSaleItems.push(...newSaleItems);
+  addedMovements.push(...newMovements);
+  stock.forEach(({ product_id, stock_quantity }) => {
+    products.find((product) => product.product_id === product_id).stock_quantity =
+      stock_quantity;
+  });
+  cart.clear();
+  message.textContent = `${reference} completed. Inventory has been reduced.`;
+  renderSalesCart();
+  renderOtherTables();
 }
 function renderOtherTables() {
   const salesTable = document.getElementById("sales-table");
@@ -334,6 +531,35 @@ const categoryFilter = document.getElementById("category-filter");
 if (categoryFilter) categoryFilter.addEventListener("change", renderProducts);
 const movementFilter = document.getElementById("movement-filter");
 if (movementFilter) movementFilter.addEventListener("change", renderMovements);
+const salesProductsTable = document.getElementById("sales-products-table");
+if (salesProductsTable) {
+  salesProductsTable.addEventListener("click", (event) => {
+    const addButton = event.target.closest("button[data-add-to-cart]");
+    if (addButton) {
+      const quantityInput = addButton
+        .closest("tr")
+        .querySelector(".cart-quantity");
+      addToCart(
+        Number(addButton.dataset.addToCart),
+        Number(quantityInput.value),
+      );
+    }
+  });
+}
+const cartTable = document.getElementById("cart-table");
+if (cartTable) {
+  cartTable.addEventListener("click", (event) => {
+    const removeButton = event.target.closest("button[data-remove-from-cart]");
+    if (removeButton) {
+      cart.delete(Number(removeButton.dataset.removeFromCart));
+      document.getElementById("cart-message").textContent = "";
+      renderSalesCart();
+    }
+  });
+  document
+    .getElementById("checkout-btn")
+    .addEventListener("click", completeSale);
+}
 const dialog = document.getElementById("product-dialog");
 if (dialog) {
   document.getElementById("add-product-btn").addEventListener("click", () => {
@@ -367,8 +593,10 @@ if (dialog) {
     renderProducts();
   });
 }
+restoreTransactions();
 const page = document.body.dataset.page;
 if (page === "dashboard") renderDashboard();
 if (page === "products") renderProducts();
 if (page === "movements") renderMovements();
+if (page === "sales") renderSalesCart();
 renderOtherTables();
