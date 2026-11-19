@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Suppliers · SmallBiz</title><link rel="stylesheet" href="style.css" /></head>
+  <body data-page="suppliers">
+    <aside class="sidebar"><div class="brand"><span class="brand-mark">SB</span><div><strong>SmallBiz</strong><small>Sales & Inventory</small></div></div>
+      <nav aria-label="Main navigation"><a class="nav-link" href="dashboard.html"><span>▦</span> Dashboard</a><a class="nav-link" href="products.html"><span>□</span> Products</a><a class="nav-link" href="inventory-movements.html"><span>↕</span> Inventory Movements</a><a class="nav-link" href="sales.html"><span>₱</span> Sales</a><a class="nav-link active" aria-current="page" href="suppliers.html"><span>▤</span> Suppliers</a><a class="nav-link" href="users.html"><span>♧</span> Users</a></nav>
+      <div class="sidebar-footer"><span class="status-dot"></span> Demo data loaded</div>
+    </aside>
+    <main class="main"><header class="topbar"><div><p class="eyebrow">SMALL BUSINESS MANAGEMENT</p><h1>Suppliers</h1></div><div class="user-chip"><div class="avatar">IV</div><div><strong>Ivan Viñas</strong><small>Owner</small></div></div></header>
+      <section class="view"><div class="section-toolbar"><div><h2>Suppliers</h2><p>Supplier directory and product supply information.</p></div></div>
+        <div class="panel"><div class="table-wrap"><table><thead><tr><th>ID</th><th>Supplier</th><th>Contact Number</th><th>Email</th><th>Address</th></tr></thead><tbody id="suppliers-table"></tbody></table></div></div>
+        <div class="panel sales-detail"><h3>Product Suppliers</h3><div class="table-wrap"><table><thead><tr><th>Product</th><th>Supplier</th><th>Supplier Product Code</th><th>Supply Price</th></tr></thead><tbody id="product-suppliers-table"></tbody></table></div></div>
+      </section><footer>SmallBiz Sales & Inventory <span>Frontend demonstration · Connect a backend for live database operations</span></footer>
+    </main><script src="script.js"></script>
+  </body>
+</html>
