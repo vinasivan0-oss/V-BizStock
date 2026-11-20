@@ -9,8 +9,8 @@
   <body data-page="dashboard">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">SB</span>
-        <div><strong>SmallBiz</strong><small>Sales & Inventory</small></div>
+        <span class="brand-mark">VB</span>
+        <div><strong>VBizStock</strong><small>Sales & Inventory Management</small></div>
       </div>
       <nav aria-label="Main navigation">
         <a class="nav-link active" aria-current="page" href="dashboard.html"
@@ -24,9 +24,7 @@
         <a class="nav-link" href="suppliers.html"><span>▤</span> Suppliers</a>
         <a class="nav-link" href="users.html"><span>♧</span> Users</a>
       </nav>
-      <div class="sidebar-footer">
-        <span class="status-dot"></span> Demo data loaded
-      </div>
+      
     </aside>
     <main class="main">
       <header class="topbar">
@@ -59,6 +57,14 @@
             <p>Total Sales</p>
             <strong id="stat-sales">₱0.00</strong
             ><small>From recorded sales</small>
+            <button
+              class="delete-btn"
+              id="reset-sales-btn"
+              type="button"
+              aria-label="Reset total sales"
+            >
+              Reset
+            </button>
           </article>
           <article class="stat-card">
             <div class="stat-icon orange">↕</div>
@@ -109,13 +115,7 @@
           </article>
         </div>
       </section>
-      <footer>
-        SmallBiz Sales & Inventory
-        <span
-          >Frontend demonstration · Connect a backend for live database
-          operations</span
-        >
-      </footer>
+    
     </main>
     <script src="auth.js"></script>
   </body>

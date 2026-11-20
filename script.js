@@ -150,6 +150,7 @@ const productSuppliers = [
 const transactionStorageKey = "smallbiz-sales-transactions";
 const productStorageKey = "smallbiz-products";
 const supplierStorageKey = "smallbiz-supplier-data";
+let salesTotalResetThroughId = 0;
 const cart = new Map();
 const addedSales = [];
 const addedSaleItems = [];
@@ -176,6 +177,17 @@ function restoreTransactions() {
       !Array.isArray(state.stock)
     ) {
       throw new Error("Saved sales data has an unexpected format.");
+    }
+
+    const savedSalesTotalResetThroughId =
+      state.salesTotalResetThroughId === undefined
+        ? 0
+        : state.salesTotalResetThroughId;
+    if (
+      !Number.isInteger(savedSalesTotalResetThroughId) ||
+      savedSalesTotalResetThroughId < 0
+    ) {
+      throw new Error("Saved total sales reset data is invalid.");
     }
 
     const savedDeletedMovementIds =
@@ -238,6 +250,7 @@ function restoreTransactions() {
     sales.push(...state.sales);
     saleItems.push(...savedSaleItems);
     movements.push(...savedMovements);
+    salesTotalResetThroughId = savedSalesTotalResetThroughId;
     addedSales.push(...state.sales);
     addedSaleItems.push(...savedSaleItems);
     addedMovements.push(...savedMovements);
@@ -252,6 +265,7 @@ function saveTransactions(
   stock,
   nextDeletedMovementIds = deletedMovementIds,
   nextDeletedSaleItemKeys = deletedSaleItemKeys,
+  nextSalesTotalResetThroughId = salesTotalResetThroughId,
 ) {
   localStorage.setItem(
     transactionStorageKey,
@@ -262,6 +276,7 @@ function saveTransactions(
       stock,
       deletedMovementIds: [...nextDeletedMovementIds],
       deletedSaleItemKeys: [...nextDeletedSaleItemKeys],
+      salesTotalResetThroughId: nextSalesTotalResetThroughId,
     }),
   );
 }
@@ -407,12 +422,22 @@ const esc = (s) =>
         c
       ],
   );
+function totalSalesSinceReset() {
+  return sales.reduce(
+    (total, sale) =>
+      sale.sale_id > salesTotalResetThroughId
+        ? total + sale.total_amount
+        : total,
+    0,
+  );
+}
 function renderDashboard() {
   if (!document.getElementById("stat-products")) return;
   document.getElementById("stat-products").textContent = products.length;
-  document.getElementById("stat-sales").textContent = money(
-    sales.reduce((a, s) => a + s.total_amount, 0),
-  );
+  const totalSales = totalSalesSinceReset();
+  document.getElementById("stat-sales").textContent = money(totalSales);
+  const resetSalesButton = document.getElementById("reset-sales-btn");
+  if (resetSalesButton) resetSalesButton.disabled = totalSales === 0;
   document.getElementById("stat-movements").textContent = movements.length;
   document.getElementById("stat-low").textContent = products.filter(
     (p) => p.stock_quantity <= p.reorder_level,
@@ -646,6 +671,15 @@ function clearMovementHistory() {
   removeMovementHistory(movements.map((movement) => movement.movement_id));
 }
 function renderSalesCart() {
+  const canCreateSales = isStaffSalesUser();
+  document
+    .getElementById("sale-creation")
+    .classList.toggle("hidden", !canCreateSales);
+  document
+    .getElementById("sales-view-only-notice")
+    .classList.toggle("hidden", canCreateSales);
+  if (!canCreateSales) return;
+
   const productTable = document.getElementById("sales-products-table");
   if (!productTable) return;
 
@@ -674,7 +708,12 @@ function renderSalesCart() {
   document.getElementById("cart-total").textContent = money(total);
   document.getElementById("checkout-btn").disabled = cart.size === 0;
 }
+function isStaffSalesUser() {
+  return window.authContext.user.role === "Staff";
+}
 function addToCart(productId, quantity) {
+  if (!isStaffSalesUser()) return;
+
   const product = products.find((item) => item.product_id === productId);
   const currentQuantity = cart.get(productId)?.quantity || 0;
   if (
@@ -697,6 +736,8 @@ function addToCart(productId, quantity) {
   renderSalesCart();
 }
 function completeSale() {
+  if (!isStaffSalesUser()) return;
+
   const message = document.getElementById("cart-message");
   const items = [...cart.entries()];
   if (!items.length) return;
@@ -806,16 +847,23 @@ function completeSale() {
 function renderOtherTables() {
   const saleItemsTable = document.getElementById("sale-items-table");
   if (saleItemsTable) {
+    const canManageSaleItems = isStaffSalesUser();
+    document
+      .getElementById("sale-items-actions-header")
+      .classList.toggle("hidden", !canManageSaleItems);
+    const clearSaleItemsButton = document.getElementById(
+      "clear-sale-items-btn",
+    );
+    if (clearSaleItemsButton)
+      clearSaleItemsButton.classList.toggle("hidden", !canManageSaleItems);
     saleItemsTable.innerHTML =
       saleItems
         .map(
           (i) =>
-            `<tr><td>#${i.sale_id}</td><td>${esc(productName(i.product_id))}</td><td>${i.quantity}</td><td>${money(i.unit_price)}</td><td>${money(i.discount)}</td><td>${money(i.subtotal)}</td><td><button class="delete-btn" type="button" data-delete-sale-item="${i.sale_id}" data-product-id="${i.product_id}" aria-label="Delete ${esc(productName(i.product_id))} from sale ${i.sale_id}">Delete</button></td></tr>`,
+            `<tr><td>#${i.sale_id}</td><td>${esc(productName(i.product_id))}</td><td>${i.quantity}</td><td>${money(i.unit_price)}</td><td>${money(i.discount)}</td><td>${money(i.subtotal)}</td>${canManageSaleItems ? `<td><button class="delete-btn" type="button" data-delete-sale-item="${i.sale_id}" data-product-id="${i.product_id}" aria-label="Delete ${esc(productName(i.product_id))} from sale ${i.sale_id}">Delete</button></td>` : ""}</tr>`,
         )
-        .join("") || '<tr><td colspan="7">No sale item history.</td></tr>';
-    const clearSaleItemsButton = document.getElementById(
-      "clear-sale-items-btn",
-    );
+        .join("") ||
+      `<tr><td colspan="${canManageSaleItems ? 7 : 6}">No sale item history.</td></tr>`;
     if (clearSaleItemsButton)
       clearSaleItemsButton.disabled = saleItems.length === 0;
   }
@@ -845,6 +893,42 @@ function renderOtherTables() {
           `<tr><td>${u.user_id}</td><td>${esc(u.first_name + " " + u.last_name)}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td><span class="pill ${u.is_active ? "good" : "inactive"}">${u.is_active ? "Active" : "Inactive"}</span></td><td>${esc(window.passwordStatusFor(u))}</td><td><button class="primary-btn update-btn" type="button" data-edit-user="${u.user_id}">Edit</button> <button class="delete-btn" type="button" data-delete-user="${u.user_id}">Delete</button></td></tr>`,
       )
       .join("");
+}
+function resetTotalSales() {
+  const totalSales = totalSalesSinceReset();
+  if (totalSales === 0) return;
+  if (
+    !window.confirm(
+      `Reset the total sales of ${money(totalSales)}? Sales history and inventory will remain unchanged. Future sales will count toward the new total.`,
+    )
+  ) {
+    return;
+  }
+
+  const nextResetThroughId = Math.max(
+    ...sales.map((sale) => sale.sale_id),
+    salesTotalResetThroughId,
+  );
+  try {
+    saveTransactions(
+      [...addedSales],
+      [...addedSaleItems],
+      [...addedMovements],
+      products.map(({ product_id, stock_quantity }) => ({
+        product_id,
+        stock_quantity,
+      })),
+      deletedMovementIds,
+      deletedSaleItemKeys,
+      nextResetThroughId,
+    );
+  } catch (error) {
+    window.alert(`Could not reset total sales: ${error.message}`);
+    return;
+  }
+
+  salesTotalResetThroughId = nextResetThroughId;
+  renderDashboard();
 }
 function openProductSupplierEditor(productId, supplierId) {
   const mappingIndex = productSuppliers.findIndex(
@@ -1091,6 +1175,8 @@ function removeSaleItemHistory(itemsToRemove) {
   renderOtherTables();
 }
 function deleteSaleItem(saleId, productId) {
+  if (!isStaffSalesUser()) return;
+
   const item = saleItems.find(
     (saleItem) =>
       saleItem.sale_id === saleId && saleItem.product_id === productId,
@@ -1106,6 +1192,8 @@ function deleteSaleItem(saleId, productId) {
   removeSaleItemHistory([item]);
 }
 function clearSaleItemHistory() {
+  if (!isStaffSalesUser()) return;
+
   if (saleItems.length === 0) return;
   if (
     !window.confirm(
@@ -1198,6 +1286,9 @@ if (movementFilter) movementFilter.addEventListener("change", renderMovements);
 const clearMovementsButton = document.getElementById("clear-movements-btn");
 if (clearMovementsButton)
   clearMovementsButton.addEventListener("click", clearMovementHistory);
+const resetSalesButton = document.getElementById("reset-sales-btn");
+if (resetSalesButton)
+  resetSalesButton.addEventListener("click", resetTotalSales);
 const movementsTable = document.getElementById("movements-table");
 if (movementsTable) {
   movementsTable.addEventListener("click", (event) => {
@@ -1207,7 +1298,7 @@ if (movementsTable) {
   });
 }
 const salesProductsTable = document.getElementById("sales-products-table");
-if (salesProductsTable) {
+if (salesProductsTable && isStaffSalesUser()) {
   salesProductsTable.addEventListener("click", (event) => {
     const addButton = event.target.closest("button[data-add-to-cart]");
     if (addButton) {
@@ -1222,7 +1313,7 @@ if (salesProductsTable) {
   });
 }
 const cartTable = document.getElementById("cart-table");
-if (cartTable) {
+if (cartTable && isStaffSalesUser()) {
   cartTable.addEventListener("click", (event) => {
     const removeButton = event.target.closest("button[data-remove-from-cart]");
     if (removeButton) {
@@ -1236,7 +1327,7 @@ if (cartTable) {
     .addEventListener("click", completeSale);
 }
 const saleItemsHistoryTable = document.getElementById("sale-items-table");
-if (saleItemsHistoryTable) {
+if (saleItemsHistoryTable && isStaffSalesUser()) {
   saleItemsHistoryTable.addEventListener("click", (event) => {
     const deleteButton = event.target.closest("button[data-delete-sale-item]");
     if (deleteButton) {
