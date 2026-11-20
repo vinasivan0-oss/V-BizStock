@@ -6,7 +6,6 @@
   --bg: #f5f7fb;
   --purple: #6759d9;
   --sidebar: #171b2d;
-  --green: #15966b;
 }
 * {
   box-sizing: border-box;
@@ -211,12 +210,6 @@ body {
 .auth-card input:focus {
   outline: 2px solid #d5d1fa;
   border-color: #9b92ed;
-}
-.auth-note {
-  margin: 22px 0 0;
-  color: var(--muted);
-  font-size: 10px;
-  text-align: center;
 }
 .view {
   padding: 29px 0 45px;
@@ -429,6 +422,10 @@ td:first-child {
 .delete-btn:hover {
   background: #fdeaea;
 }
+#reset-sales-btn {
+  display: block;
+  margin-top: 10px;
+}
 .delete-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -514,12 +511,6 @@ td:first-child {
 .cart-heading h3 {
   margin: 0 auto 0 0;
 }
-.cart-heading label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-.cart-heading select,
 .cart-quantity {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -549,15 +540,6 @@ td:first-child {
   cursor: not-allowed;
   opacity: 0.55;
   box-shadow: none;
-}
-footer {
-  border-top: 1px solid var(--line);
-  padding: 18px 0 25px;
-  color: #929bad;
-  font-size: 10px;
-}
-footer span {
-  float: right;
 }
 dialog {
   border: 0;
@@ -727,10 +709,5 @@ dialog select {
   }
   .table-tools {
     flex-direction: column;
-  }
-  footer span {
-    display: block;
-    float: none;
-    margin-top: 6px;
   }
 }

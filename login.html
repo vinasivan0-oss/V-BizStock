@@ -9,40 +9,12 @@
   <body data-page="login" class="auth-page">
     <main class="auth-card">
       <div class="brand auth-brand">
-        <span class="brand-mark">SB</span>
-        <div><strong>SmallBiz</strong><small>Sales & Inventory</small></div>
+        <span class="brand-mark">VB</span>
+        <div><strong>VbizStock</strong><small>Sales & Inventory Management</small></div>
       </div>
-      <section id="admin-setup-section" class="hidden">
-        <h1>Set up the admin account</h1>
-        <p>Create the first admin password to continue.</p>
-        <form id="admin-setup-form">
-          <label>
-            Admin password
-            <input
-              name="password"
-              type="password"
-              minlength="8"
-              autocomplete="new-password"
-              required
-            />
-          </label>
-          <label>
-            Confirm password
-            <input
-              name="confirm_password"
-              type="password"
-              minlength="8"
-              autocomplete="new-password"
-              required
-            />
-          </label>
-          <p id="admin-setup-error" class="form-error" role="alert"></p>
-          <button class="primary-btn full-btn" type="submit">Set password and continue</button>
-        </form>
-      </section>
-      <section id="login-section" class="hidden">
-        <h1>Sign in</h1>
-        <p>Use your system account to continue.</p>
+      <section id="login-section">
+        <h1> Login</h1>
+       
         <form id="login-form">
           <label>
             Username
@@ -66,7 +38,7 @@
           <button class="primary-btn full-btn" type="submit">Sign in</button>
         </form>
       </section>
-      <p class="auth-note">Frontend demo only. Use a backend for secure authentication.</p>
+     
     </main>
     <script src="auth.js"></script>
   </body>

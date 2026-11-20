@@ -158,13 +158,6 @@
     return { salt, hash: await hashPassword(password, salt) };
   }
 
-  function writeCredential(user, credential) {
-    const credentials = readCredentials();
-    credentials[userCredentialKey(user)] = credential;
-    delete credentials[user.username];
-    localStorage.setItem(credentialsKey, JSON.stringify(credentials));
-  }
-
   function persistUserData(userState, credentials) {
     const previousUsers = localStorage.getItem(usersKey);
     const previousCredentials = localStorage.getItem(credentialsKey);
@@ -226,71 +219,19 @@
   }
 
   function initializeLoginPage() {
-    const setupSection = document.getElementById("admin-setup-section");
     const loginSection = document.getElementById("login-section");
-    const setupForm = document.getElementById("admin-setup-form");
     const loginForm = document.getElementById("login-form");
-    const setupError = document.getElementById("admin-setup-error");
     const loginError = document.getElementById("login-error");
 
-    let users;
-    let credentials;
     try {
-      users = readUserState().users;
-      credentials = readCredentials();
+      readUserState();
+      readCredentials();
     } catch (error) {
       loginSection.classList.remove("hidden");
       showMessage(loginError, error.message);
       loginForm.querySelector("button[type=submit]").disabled = true;
       return;
     }
-
-    const activeAdmins = users.filter(
-      (user) => user.role === "Admin" && user.is_active,
-    );
-    if (activeAdmins.length === 0) {
-      loginSection.classList.remove("hidden");
-      showMessage(loginError, "No active admin account is available.");
-      loginForm.querySelector("button[type=submit]").disabled = true;
-      return;
-    }
-    const setupAdmin = activeAdmins.find(
-      (user) => !credentialFor(user, credentials),
-    );
-    setupSection.classList.toggle("hidden", !setupAdmin);
-    loginSection.classList.toggle("hidden", Boolean(setupAdmin));
-
-    setupForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      setupError.textContent = "";
-      const password = setupForm.elements.password.value;
-      const confirmation = setupForm.elements.confirm_password.value;
-      if (password.length < 8) {
-        showMessage(
-          setupError,
-          "Use at least 8 characters for the admin password.",
-        );
-        return;
-      }
-      if (password !== confirmation) {
-        showMessage(setupError, "The passwords do not match.");
-        return;
-      }
-
-      const submitButton = setupForm.querySelector("button[type=submit]");
-      submitButton.disabled = true;
-      try {
-        writeCredential(setupAdmin, await makeCredential(password));
-        setSession(setupAdmin.user_id);
-        window.location.replace("dashboard.html");
-      } catch (error) {
-        showMessage(
-          setupError,
-          `Could not set the admin password: ${error.message}`,
-        );
-        submitButton.disabled = false;
-      }
-    });
 
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -318,11 +259,11 @@
         let credential = credentialFor(user, currentCredentials);
         if (
           !credential &&
-          user.user_id === 2 &&
-          user.role === "Staff" &&
+          ((user.user_id === 1 && user.role === "Admin") ||
+            (user.user_id === 2 && user.role === "Staff")) &&
           password === staffInitialPassword
         ) {
-          credential = await makeCredential(staffInitialPassword);
+          credential = await makeCredential(password);
         }
         if (
           !credential ||
