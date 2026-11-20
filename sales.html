@@ -9,8 +9,8 @@
   <body data-page="sales">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">SB</span>
-        <div><strong>SmallBiz</strong><small>Sales & Inventory</small></div>
+        <span class="brand-mark">VB</span>
+        <div><strong>VBizStock</strong><small>Sales & Inventory Management</small></div>
       </div>
       <nav aria-label="Main navigation">
         <a class="nav-link" href="dashboard.html"><span>▦</span> Dashboard</a
@@ -22,15 +22,13 @@
         ><a class="nav-link" href="suppliers.html"><span>▤</span> Suppliers</a
         ><a class="nav-link" href="users.html"><span>♧</span> Users</a>
       </nav>
-      <div class="sidebar-footer">
-        <span class="status-dot"></span> Demo data loaded
-      </div>
+     
     </aside>
     <main class="main">
       <header class="topbar">
         <div>
           <p class="eyebrow">SMALL BUSINESS MANAGEMENT</p>
-          <h1>Sales</h1>
+         
         </div>
         <div class="user-chip">
           <div class="avatar">IV</div>
@@ -38,53 +36,61 @@
         </div>
       </header>
       <section class="view">
-        <div class="section-toolbar">
+        <div id="sales-view-only-notice" class="section-toolbar hidden">
           <div>
-            <h2>Create a Sale</h2>
-            <p>Add products to the cart, then complete checkout to reduce stock.</p>
+            <h2>Sale Items</h2>
+            <p>Admins can view sale items; only staff can create sales.</p>
           </div>
         </div>
-        <div class="panel">
-          <h3>Products</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Unit Price</th>
-                  <th>In Stock</th>
-                  <th>Quantity</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="sales-products-table"></tbody>
-            </table>
+        <div id="sale-creation">
+          <div class="section-toolbar">
+            <div>
+              <h2>Create a Sale</h2>
+              <p>Add products to the cart, then complete checkout.</p>
+            </div>
           </div>
-        </div>
-        <div class="panel">
-          <div class="cart-heading">
-            <h3>Cart</h3>
+          <div class="panel">
+            <h3>Products</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Unit Price</th>
+                    <th>In Stock</th>
+                    <th>Quantity</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="sales-products-table"></tbody>
+              </table>
+            </div>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Quantity</th>
-                  <th>Unit Price</th>
-                  <th>Subtotal</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="cart-table"></tbody>
-            </table>
-          </div>
-          <div class="cart-footer">
-            <p id="cart-message" class="form-error" role="status" aria-live="polite"></p>
-            <strong>Total: <span id="cart-total">₱0.00</span></strong>
-            <button class="primary-btn" id="checkout-btn" type="button" disabled>
-              Complete Sale
-            </button>
+          <div class="panel">
+            <div class="cart-heading">
+              <h3>Cart</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Subtotal</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="cart-table"></tbody>
+              </table>
+            </div>
+            <div class="cart-footer">
+              <p id="cart-message" class="form-error" role="status" aria-live="polite"></p>
+              <strong>Total: <span id="cart-total">₱0.00</span></strong>
+              <button class="primary-btn" id="checkout-btn" type="button" disabled>
+                Complete Sale
+              </button>
+            </div>
           </div>
         </div>
         <div class="panel sales-detail">
@@ -108,7 +114,7 @@
                   <th>Unit Price</th>
                   <th>Discount</th>
                   <th>Subtotal</th>
-                  <th>Action</th>
+                  <th id="sale-items-actions-header">Action</th>
                 </tr>
               </thead>
               <tbody id="sale-items-table"></tbody>
@@ -116,13 +122,7 @@
           </div>
         </div>
       </section>
-      <footer>
-        SmallBiz Sales & Inventory
-        <span
-          >Frontend demonstration · Connect a backend for live database
-          operations</span
-        >
-      </footer>
+     
     </main>
     <script src="auth.js"></script>
   </body>
