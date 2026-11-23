@@ -32,8 +32,8 @@
           
         </div>
         <div class="user-chip">
-          <div class="avatar">IV</div>
-          <div><strong>Ivan Viñas</strong><small>Owner</small></div>
+          <div class="avatar"></div>
+          <div><strong></strong><small></small></div>
         </div>
       </header>
       <section class="view">
@@ -56,7 +56,6 @@
                   <th>Username</th>
                   <th>Role</th>
                   <th>Status</th>
-                  <th>Password</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -83,21 +82,21 @@
           </div>
           <label>
             ID
-            <input name="user_id" type="number" min="1" readonly required />
+            <input name="user_id" type="text" readonly placeholder="Auto" />
           </label>
           <div class="form-row">
             <label>
               First name
-              <input name="first_name" type="text" maxlength="60" required />
+              <input name="first_name" type="text" maxlength="50" required />
             </label>
             <label>
               Last name
-              <input name="last_name" type="text" maxlength="60" required />
+              <input name="last_name" type="text" maxlength="50" required />
             </label>
           </div>
           <label>
             Username
-            <input name="username" type="text" maxlength="40" autocomplete="username" required />
+            <input name="username" type="text" maxlength="50" autocomplete="username" required />
           </label>
           <div class="form-row">
             <label>

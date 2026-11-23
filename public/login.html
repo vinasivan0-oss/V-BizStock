@@ -38,7 +38,21 @@
           <button class="primary-btn full-btn" type="submit">Sign in</button>
         </form>
       </section>
-     
+      <section id="setup-section" class="hidden">
+        <h1>Create admin account</h1>
+        <p>Welcome! No users exist yet. Create the first Admin account to get started.</p>
+        <form id="setup-form">
+          <div class="form-row">
+            <label>First name<input name="first_name" type="text" maxlength="50" required /></label>
+            <label>Last name<input name="last_name" type="text" maxlength="50" required /></label>
+          </div>
+          <label>Username<input name="username" type="text" maxlength="50" autocomplete="username" required /></label>
+          <label>Password (min. 8 characters)<input name="password" type="password" autocomplete="new-password" required /></label>
+          <label>Confirm password<input name="confirm_password" type="password" autocomplete="new-password" required /></label>
+          <p id="setup-error" class="form-error" role="alert"></p>
+          <button class="primary-btn full-btn" type="submit">Create account</button>
+        </form>
+      </section>
     </main>
     <script src="auth.js"></script>
   </body>

@@ -31,8 +31,8 @@
           
         </div>
         <div class="user-chip">
-          <div class="avatar">IV</div>
-          <div><strong>Ivan Viñas</strong><small>Owner</small></div>
+          <div class="avatar"></div>
+          <div><strong></strong><small></small></div>
         </div>
       </header>
       <section class="view">
@@ -41,9 +41,10 @@
             <h2>Product Inventory</h2>
             <p>Manage products, prices, and stock levels.</p>
           </div>
-          <button class="primary-btn" id="add-product-btn">
-            ＋ Add Product
-          </button>
+          <div class="movement-toolbar-actions">
+            <button class="primary-btn update-btn" id="manage-categories-btn" type="button">Categories</button>
+            <button class="primary-btn" id="add-product-btn">＋ Add Product</button>
+          </div>
         </div>
         <div class="panel">
           <div class="table-tools">
@@ -53,9 +54,6 @@
               placeholder="Search product name or SKU..."
             /><select id="category-filter">
               <option value="">All categories</option>
-              <option>Beverages</option>
-              <option>Snacks</option>
-              <option>Personal Care</option>
             </select>
           </div>
           <div class="table-wrap">
@@ -85,7 +83,7 @@
         <div class="dialog-heading">
           <div>
             <h2>Add Product</h2>
-            <p>Add a product to the demo inventory.</p>
+            <p>Add a product to your inventory.</p>
           </div>
           <button type="button" class="close-btn" id="close-dialog">×</button>
         </div>
@@ -93,22 +91,18 @@
           >Product name<input
             name="product_name"
             required
-            maxlength="150"
+            maxlength="50"
             placeholder="e.g. Bottled Juice"
         /></label>
         <label
           >SKU<input
             name="sku"
             required
-            maxlength="50"
+            maxlength="30"
             placeholder="e.g. BEV-003"
         /></label>
         <label
-          >Category<select name="category_id" required>
-            <option value="1">Beverages</option>
-            <option value="2">Snacks</option>
-            <option value="3">Personal Care</option>
-          </select></label
+          >Category<select name="category_id" required></select></label
         >
         <div class="form-row">
           <label
@@ -165,6 +159,13 @@
             ×
           </button>
         </div>
+        <label
+          >Product name<input name="product_name" required maxlength="50"
+        /></label>
+        <div class="form-row">
+          <label>SKU<input name="sku" required maxlength="30" /></label>
+          <label>Category<select name="category_id" required></select></label>
+        </div>
         <div class="form-row">
           <label
             >Unit price<input
@@ -193,6 +194,11 @@
               required
           /></label>
           <label
+            >Reorder level<input name="reorder_level" type="number" min="0" step="1" required
+          /></label>
+        </div>
+        <div class="form-row">
+          <label
             >Status<select name="status" required>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
@@ -201,6 +207,23 @@
         </div>
         <p id="update-form-error" class="form-error"></p>
         <button class="primary-btn full-btn" type="submit">Save Changes</button>
+      </form>
+    </dialog>
+    <dialog id="category-dialog">
+      <form id="category-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Categories</h2>
+            <p>Add the categories you use to group products.</p>
+          </div>
+          <button type="button" class="close-btn" id="close-category-dialog">×</button>
+        </div>
+        <label>New category<input name="category_name" maxlength="100" placeholder="e.g. Beverages" required /></label>
+        <p id="category-form-error" class="form-error"></p>
+        <button class="primary-btn full-btn" type="submit">Add Category</button>
+        <div class="table-wrap">
+          <table><tbody id="category-list"></tbody></table>
+        </div>
       </form>
     </dialog>
     <script src="auth.js"></script>

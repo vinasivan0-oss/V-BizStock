@@ -33,8 +33,8 @@
         
         </div>
         <div class="user-chip">
-          <div class="avatar">IV</div>
-          <div><strong>Ivan Viñas</strong><small>Owner</small></div>
+          <div class="avatar"></div>
+          <div><strong></strong><small></small></div>
         </div>
       </header>
       <section class="view">
@@ -48,7 +48,9 @@
               <option value="">All movement types</option>
               <option>STOCK_IN</option>
               <option>STOCK_OUT</option>
+              <option>RETURN</option>
             </select>
+            <button class="primary-btn" id="add-movement-btn" type="button">＋ Record Movement</button>
             <button class="delete-btn" id="clear-movements-btn" type="button">
               Clear History
             </button>
@@ -76,6 +78,30 @@
       </section>
       
     </main>
+    <dialog id="movement-dialog">
+      <form id="movement-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Record Movement</h2>
+            <p>Stock in (e.g. delivery), stock out, or a customer return.</p>
+          </div>
+          <button type="button" class="close-btn" id="close-movement-dialog">×</button>
+        </div>
+        <label>Product<select name="product_id" required></select></label>
+        <div class="form-row">
+          <label>Type<select name="movement_type" required>
+            <option value="STOCK_IN">STOCK_IN</option>
+            <option value="STOCK_OUT">STOCK_OUT</option>
+            <option value="RETURN">RETURN</option>
+          </select></label>
+          <label>Quantity<input name="quantity" type="number" min="1" step="1" required /></label>
+        </div>
+        <label>Reference<input name="reference_number" maxlength="100" placeholder="e.g. PO-001" /></label>
+        <label>Remarks<input name="remarks" maxlength="255" /></label>
+        <p id="movement-form-error" class="form-error"></p>
+        <button class="primary-btn full-btn" type="submit">Save Movement</button>
+      </form>
+    </dialog>
     <script src="auth.js"></script>
   </body>
 </html>
