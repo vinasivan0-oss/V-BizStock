@@ -511,7 +511,8 @@ td:first-child {
 .cart-heading h3 {
   margin: 0 auto 0 0;
 }
-.cart-quantity {
+.cart-quantity,
+.cart-discount {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px 8px;
@@ -521,6 +522,9 @@ td:first-child {
 }
 .cart-quantity {
   width: 75px;
+}
+.cart-discount {
+  width: 90px;
 }
 .cart-footer {
   justify-content: flex-end;

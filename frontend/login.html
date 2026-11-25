@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login · VBizStock</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-page="login" class="auth-page">
+    <main class="auth-card">
+      <div class="brand auth-brand">
+        <span class="brand-mark">VB</span>
+        <div><strong>VbizStock</strong><small>Sales & Inventory Management</small></div>
+      </div>
+      <section id="login-section">
+        <h1> Login</h1>
+       
+        <form id="login-form">
+          <label>
+            Username
+            <input
+              name="username"
+              type="text"
+              autocomplete="username"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <p id="login-error" class="form-error" role="alert"></p>
+          <button class="primary-btn full-btn" type="submit">Sign in</button>
+        </form>
+      </section>
+     
+    </main>
+    <script src="auth.js"></script>
+  </body>
+</html>

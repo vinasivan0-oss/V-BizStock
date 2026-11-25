@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales · VBizStock</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-page="sales">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">VB</span>
+        <div><strong>VBizStock</strong><small>Sales & Inventory Management</small></div>
+      </div>
+      <nav aria-label="Main navigation">
+        <a class="nav-link" href="dashboard.html"><span>▦</span> Dashboard</a
+        ><a class="nav-link" href="products.html"><span>□</span> Products</a
+        ><a class="nav-link" href="inventory-movements.html"
+          ><span>↕</span> Inventory Movements</a
+        ><a class="nav-link active" aria-current="page" href="sales.html"
+          ><span>₱</span> Sales</a
+        ><a class="nav-link" href="suppliers.html"><span>▤</span> Suppliers</a
+        ><a class="nav-link" href="users.html"><span>♧</span> Users</a>
+      </nav>
+     
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">SMALL BUSINESS MANAGEMENT</p>
+         
+        </div>
+        <div class="user-chip">
+          <div class="avatar">IV</div>
+          <div><strong>Ivan Viñas</strong><small>Owner</small></div>
+        </div>
+      </header>
+      <section class="view">
+        <div id="sales-view-only-notice" class="section-toolbar hidden">
+          <div>
+            <h2>Sale Items</h2>
+            <p>Admins can view sale items; only staff can create sales.</p>
+          </div>
+        </div>
+        <div id="sale-creation">
+          <div class="section-toolbar">
+            <div>
+              <h2>Create a Sale</h2>
+              <p>Add products to the cart, then complete checkout.</p>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Products</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Unit Price</th>
+                    <th>In Stock</th>
+                    <th>Quantity</th>
+                    <th>Discount</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="sales-products-table"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="cart-heading">
+              <h3>Cart</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Discount</th>
+                    <th>Subtotal</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="cart-table"></tbody>
+              </table>
+            </div>
+            <div class="cart-footer">
+              <p id="cart-message" class="form-error" role="status" aria-live="polite"></p>
+              <strong>Total: <span id="cart-total">₱0.00</span></strong>
+              <button class="primary-btn" id="checkout-btn" type="button" disabled>
+                Complete Sale
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="panel sales-detail">
+          <div class="cart-heading">
+            <h3>Sale Items</h3>
+            <button
+              class="delete-btn"
+              id="clear-sale-items-btn"
+              type="button"
+            >
+              Clear History
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Sale ID</th>
+                  <th>Product</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Discount</th>
+                  <th>Subtotal</th>
+                  <th id="sale-items-actions-header">Action</th>
+                </tr>
+              </thead>
+              <tbody id="sale-items-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+     
+    </main>
+    <script src="auth.js"></script>
+  </body>
+</html>

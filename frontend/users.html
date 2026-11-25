@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Users · VBizStock</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-page="users">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">VB</span>
+        <div><strong>VBizStock</strong><small>Sales & Inventory Management</small></div>
+      </div>
+      <nav aria-label="Main navigation">
+        <a class="nav-link" href="dashboard.html"><span>▦</span> Dashboard</a
+        ><a class="nav-link" href="products.html"><span>□</span> Products</a
+        ><a class="nav-link" href="inventory-movements.html"
+          ><span>↕</span> Inventory Movements</a
+        ><a class="nav-link" href="sales.html"><span>₱</span> Sales</a
+        ><a class="nav-link" href="suppliers.html"><span>▤</span> Suppliers</a
+        ><a class="nav-link active" aria-current="page" href="users.html"
+          ><span>♧</span> Users</a
+        >
+      </nav>
+      
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">SMALL BUSINESS MANAGEMENT</p>
+          
+        </div>
+        <div class="user-chip">
+          <div class="avatar">IV</div>
+          <div><strong>Ivan Viñas</strong><small>Owner</small></div>
+        </div>
+      </header>
+      <section class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>System Users</h2>
+            <p>Registered accounts and assigned roles.</p>
+          </div>
+          <button class="primary-btn" id="add-user-btn" type="button">
+            Add User
+          </button>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Password</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="users-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <dialog id="user-dialog">
+        <form id="user-form">
+          <div class="dialog-heading">
+            <div>
+              <h2 id="user-dialog-title">Add user</h2>
+              <p>IDs are generated automatically and cannot be changed.</p>
+            </div>
+            <button
+              class="close-btn"
+              id="close-user-dialog"
+              type="button"
+              aria-label="Close dialog"
+            >
+              ×
+            </button>
+          </div>
+          <label>
+            ID
+            <input name="user_id" type="number" min="1" readonly required />
+          </label>
+          <div class="form-row">
+            <label>
+              First name
+              <input name="first_name" type="text" maxlength="60" required />
+            </label>
+            <label>
+              Last name
+              <input name="last_name" type="text" maxlength="60" required />
+            </label>
+          </div>
+          <label>
+            Username
+            <input name="username" type="text" maxlength="40" autocomplete="username" required />
+          </label>
+          <div class="form-row">
+            <label>
+              Role
+              <select name="role" required>
+                <option value="Admin">Admin</option>
+                <option value="Staff">Staff</option>
+              </select>
+            </label>
+            <label>
+              Status
+              <select name="is_active" required>
+                <option value="1">Active</option>
+                <option value="0">Inactive</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Password <span id="user-password-hint">Required for new users</span>
+            <input
+              name="password"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <label>
+            Confirm password
+            <input
+              name="confirm_password"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <p id="user-form-error" class="form-error" role="alert"></p>
+          <button class="primary-btn full-btn" type="submit">Save User</button>
+        </form>
+      </dialog>
+      
+    </main>
+    <script src="auth.js"></script>
+  </body>
+</html>
