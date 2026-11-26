@@ -23,6 +23,8 @@ const RESET_KEY = "sales_total_reset_through_id";
 
 let pool;
 
+
+
 /* ------------------------------------------------------------------ */
 /* Database setup                                                      */
 /* ------------------------------------------------------------------ */
@@ -60,6 +62,10 @@ async function withTx(fn) {
     conn.release();
   }
 }
+
+
+
+
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -107,6 +113,10 @@ function checkPassword(password) {
     throw bad("Passwords must contain at least 8 characters.");
 }
 
+
+
+
+
 /* ------------------------------------------------------------------ */
 /* Auth middleware                                                     */
 /* ------------------------------------------------------------------ */
@@ -144,6 +154,10 @@ function startSession(res, userId) {
     maxAge: SESSION_HOURS * 3600 * 1000,
   });
 }
+
+
+
+
 
 /* ------------------------------------------------------------------ */
 /* App + routes                                                        */
@@ -208,8 +222,13 @@ api.post("/auth/logout", (req, res) => {
 
 api.get("/auth/me", requireAuth, (req, res) => res.json({ user: req.user }));
 
+
+
 /* Everything below requires a signed-in user */
 api.use(requireAuth);
+
+
+
 
 /* ---- Users (admin) ---- */
 api.get("/users", adminOnly, wrap(async (req, res) => {
@@ -289,6 +308,10 @@ api.delete("/users/:id", adminOnly, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+
+
+
+
 /* ---- Categories ---- */
 api.get("/categories", wrap(async (req, res) => {
   const [rows] = await pool.query("SELECT category_id, category_name FROM category ORDER BY category_name");
@@ -304,6 +327,10 @@ api.delete("/categories/:id", adminOnly, wrap(async (req, res) => {
   if (!r.affectedRows) throw new HttpError(404, "Category not found.");
   res.json({ ok: true });
 }));
+
+
+
+
 
 /* ---- Products ---- */
 const PRODUCT_SELECT = `SELECT p.product_id, p.category_id, c.category_name, p.product_name, p.sku,
@@ -385,6 +412,10 @@ api.delete("/products/:id", adminOnly, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+
+
+
+
 /* ---- Suppliers ---- */
 api.get("/suppliers", adminOnly, wrap(async (req, res) => {
   const [rows] = await pool.query(
@@ -412,6 +443,10 @@ api.delete("/suppliers/:id", adminOnly, wrap(async (req, res) => {
   });
   res.json({ ok: true });
 }));
+
+
+
+
 
 /* ---- Product suppliers ---- */
 api.get("/product-suppliers", adminOnly, wrap(async (req, res) => {
@@ -470,6 +505,10 @@ api.delete("/product-suppliers/:productId/:supplierId", adminOnly, wrap(async (r
   res.json({ ok: true });
 }));
 
+
+
+
+
 /* ---- Inventory movements ---- */
 api.get("/movements", adminOnly, wrap(async (req, res) => {
   const [rows] = await pool.query(
@@ -506,6 +545,10 @@ api.post("/movements", adminOnly, wrap(async (req, res) => {
   });
   res.status(201).json({ ok: true });
 }));
+
+
+
+
 
 // History only: these do not change product stock.
 api.delete("/movements/:id", adminOnly, wrap(async (req, res) => {
@@ -578,6 +621,10 @@ api.get("/sales/items", requireRole("Admin", "Staff"), wrap(async (req, res) => 
   res.json(rows);
 }));
 
+
+
+
+
 // History only: these do not change stock or sales totals.
 api.delete("/sales/items/:saleId/:productId", staffOnly, wrap(async (req, res) => {
   const [r] = await pool.query("DELETE FROM sale_item WHERE sale_id=? AND product_id=?", [
@@ -591,6 +638,11 @@ api.delete("/sales/items", staffOnly, wrap(async (req, res) => {
   await pool.query("DELETE FROM sale_item");
   res.json({ ok: true });
 }));
+
+
+
+
+
 
 /* ---- Dashboard ---- */
 async function resetThroughId() {
@@ -631,9 +683,17 @@ api.post("/dashboard/reset-sales", adminOnly, wrap(async (req, res) => {
 
 api.use((req, res, next) => next(new HttpError(404, "Not found.")));
 
+
+
+
+
 /* ---- Static frontend ---- */
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "frontend")));
 app.get("/", (req, res) => res.redirect("/login.html"));
+
+
+
+
 
 /* ---- Errors ---- */
 app.use((err, req, res, next) => {
