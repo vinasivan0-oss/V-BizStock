@@ -1,4 +1,4 @@
-// VBizStock frontend: every page loads and saves data through the Node/Express + MySQL API.
+// VBizStock frontend: every page loads and saves data through the Node/Express + PostgreSQL API.
 (() => {
   const page = document.body.dataset.page;
   const $ = (id) => document.getElementById(id);

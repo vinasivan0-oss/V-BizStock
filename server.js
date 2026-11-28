@@ -3,25 +3,41 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
-const mysql = require("mysql2/promise");
+const { Pool, Client, types } = require("pg");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 
 const PORT = Number(process.env.PORT) || 3000;
-const DB_NAME = process.env.DB_NAME || "VBizStock_DB";
+const DB_NAME = process.env.DB_NAME || "vbizstock_db";
+const ADMIN_DB = process.env.DB_ADMIN_DB || "postgres"; // used only to create DB_NAME if it does not exist
 const DB_CONFIG = {
   host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
+  port: Number(process.env.DB_PORT) || 5432,
+  user: process.env.DB_USER || "postgres",
+  password: process.env.DB_PASSWORD || "vbizstock132",
 };
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
 const COOKIE_NAME = "vbizstock_token";
 const SESSION_HOURS = 8;
 const RESET_KEY = "sales_total_reset_through_id";
 
+// Return plain numbers and date strings, which is what the frontend expects.
+types.setTypeParser(20, (v) => Number(v));       // bigint (ids, COUNT(*))
+types.setTypeParser(1700, (v) => parseFloat(v)); // numeric / decimal
+types.setTypeParser(1114, (v) => v);             // timestamp -> "YYYY-MM-DD HH:MM:SS"
+types.setTypeParser(1184, (v) => v);             // timestamptz
+
 let pool;
+
+// Queries below are written with "?" placeholders; convert them to $1, $2, ... for pg.
+const toPg = (sql) => {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+};
+const db = { query: (sql, params) => pool.query(toPg(sql), params) };
+
+const quoteIdent = (name) => `"${String(name).replace(/"/g, '""')}"`;
 
 
 
@@ -29,37 +45,39 @@ let pool;
 /* Database setup                                                      */
 /* ------------------------------------------------------------------ */
 async function initDatabase() {
-  const conn = await mysql.createConnection({ ...DB_CONFIG, multipleStatements: true });
+
+  
+  const admin = new Client({ ...DB_CONFIG, database: ADMIN_DB });
+  await admin.connect();
   try {
-    let schema = fs.readFileSync(path.join(__dirname, "db", "VBizStock_DB.sql"), "utf8");
-    if (DB_NAME !== "VBizStock_DB") schema = schema.split("VBizStock_DB").join(DB_NAME);
-    await conn.query(schema);
-    // Reference data required by the app (not sample data): the two roles.
-    await conn.query(`INSERT IGNORE INTO \`${DB_NAME}\`.role (role_name) VALUES ('Admin'), ('Staff')`);
+    const found = await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [DB_NAME]);
+    if (!found.rowCount) await admin.query(`CREATE DATABASE ${quoteIdent(DB_NAME)}`);
   } finally {
-    await conn.end();
+    await admin.end();
   }
-  pool = mysql.createPool({
-    ...DB_CONFIG,
-    database: DB_NAME,
-    connectionLimit: 10,
-    decimalNumbers: true,
-    dateStrings: true,
-  });
+
+  pool = new Pool({ ...DB_CONFIG, database: DB_NAME, max: 10 });
+  pool.on("error", (err) => console.error("Unexpected PostgreSQL pool error:", err.message));
+
+  const schema = fs.readFileSync(path.join(__dirname, "db", "VBizStock_DB.sql"), "utf8");
+  await pool.query(schema);
+  // Reference data required by the app (not sample data): the two roles.
+  await pool.query("INSERT INTO role (role_name) VALUES ('Admin'), ('Staff') ON CONFLICT (role_name) DO NOTHING");
 }
 
 async function withTx(fn) {
-  const conn = await pool.getConnection();
+  const client = await pool.connect();
+  const tx = { query: (sql, params) => client.query(toPg(sql), params) };
   try {
-    await conn.beginTransaction();
-    const result = await fn(conn);
-    await conn.commit();
+    await client.query("BEGIN");
+    const result = await fn(tx);
+    await client.query("COMMIT");
     return result;
   } catch (error) {
-    await conn.rollback();
+    await client.query("ROLLBACK").catch(() => {});
     throw error;
   } finally {
-    conn.release();
+    client.release();
   }
 }
 
@@ -133,7 +151,7 @@ async function requireAuth(req, res, next) {
     } catch {
       throw new HttpError(401, "Your session has expired. Please sign in again.");
     }
-    const [rows] = await pool.query(`${USER_SELECT} WHERE u.user_id = ?`, [payload.uid]);
+    const { rows } = await db.query(`${USER_SELECT} WHERE u.user_id = ?`, [payload.uid]);
     if (!rows.length || !rows[0].is_active) throw new HttpError(401, "Account is not available.");
     req.user = rows[0];
     next();
@@ -169,9 +187,11 @@ app.use(cookieParser());
 const api = express.Router();
 app.use("/api", api);
 
+
+
 /* ---- Auth ---- */
 api.get("/auth/status", wrap(async (req, res) => {
-  const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM users");
+  const { rows: [{ n }] } = await db.query("SELECT COUNT(*) AS n FROM users");
   res.json({ needsSetup: n === 0 });
 }));
 
@@ -184,24 +204,26 @@ api.post("/auth/setup", wrap(async (req, res) => {
   if (b.password !== b.confirm_password) throw bad("The passwords do not match.");
   const hash = await bcrypt.hash(b.password, 10);
   const userId = await withTx(async (conn) => {
-    const [[{ n }]] = await conn.query("SELECT COUNT(*) AS n FROM users FOR UPDATE");
+    // FOR UPDATE is not allowed with COUNT(*) in PostgreSQL; lock the table to serialise first-run setup.
+    await conn.query("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE");
+    const { rows: [{ n }] } = await conn.query("SELECT COUNT(*) AS n FROM users");
     if (n > 0) throw new HttpError(403, "Setup is already complete. Please sign in.");
-    const [[role]] = await conn.query("SELECT role_id FROM role WHERE role_name = 'Admin'");
-    const [r] = await conn.query(
-      "INSERT INTO users (role_id, username, password_hash, first_name, last_name, is_active) VALUES (?,?,?,?,?,1)",
+    const { rows: [role] } = await conn.query("SELECT role_id FROM role WHERE role_name = 'Admin'");
+    const { rows: [created] } = await conn.query(
+      "INSERT INTO users (role_id, username, password_hash, first_name, last_name, is_active) VALUES (?,?,?,?,?,1) RETURNING user_id",
       [role.role_id, username, hash, first, last],
     );
-    return r.insertId;
+    return created.user_id;
   });
   startSession(res, userId);
-  const [rows] = await pool.query(`${USER_SELECT} WHERE u.user_id = ?`, [userId]);
+  const { rows } = await db.query(`${USER_SELECT} WHERE u.user_id = ?`, [userId]);
   res.status(201).json({ user: rows[0] });
 }));
 
 api.post("/auth/login", wrap(async (req, res) => {
   const username = String(req.body?.username || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
-  const [rows] = await pool.query(
+  const { rows } = await db.query(
     `SELECT u.user_id, u.username, u.first_name, u.last_name, u.is_active, r.role_name AS role,
             u.password_hash AS _hash
      FROM users u JOIN role r ON r.role_id = u.role_id WHERE u.username = ?`,
@@ -232,12 +254,12 @@ api.use(requireAuth);
 
 /* ---- Users (admin) ---- */
 api.get("/users", adminOnly, wrap(async (req, res) => {
-  const [rows] = await pool.query(`${USER_SELECT} ORDER BY u.user_id`);
+  const { rows } = await db.query(`${USER_SELECT} ORDER BY u.user_id`);
   res.json(rows);
 }));
 
 async function assertAdminRemains(conn) {
-  const [[{ n }]] = await conn.query(
+  const { rows: [{ n }] } = await conn.query(
     `SELECT COUNT(*) AS n FROM users u JOIN role r ON r.role_id = u.role_id
      WHERE r.role_name = 'Admin' AND u.is_active = 1`,
   );
@@ -263,12 +285,12 @@ api.post("/users", adminOnly, wrap(async (req, res) => {
   checkPassword(req.body.password);
   if (req.body.password !== req.body.confirm_password) throw bad("The passwords do not match.");
   const hash = await bcrypt.hash(req.body.password, 10);
-  const [[role]] = await pool.query("SELECT role_id FROM role WHERE role_name = ?", [f.role]);
-  const [r] = await pool.query(
-    "INSERT INTO users (role_id, username, password_hash, first_name, last_name, is_active) VALUES (?,?,?,?,?,?)",
+  const { rows: [role] } = await db.query("SELECT role_id FROM role WHERE role_name = ?", [f.role]);
+  const { rows: [created] } = await db.query(
+    "INSERT INTO users (role_id, username, password_hash, first_name, last_name, is_active) VALUES (?,?,?,?,?,?) RETURNING user_id",
     [role.role_id, f.username, hash, f.first, f.last, f.active],
   );
-  res.status(201).json({ user_id: r.insertId });
+  res.status(201).json({ user_id: created.user_id });
 }));
 
 api.put("/users/:id", adminOnly, wrap(async (req, res) => {
@@ -283,15 +305,15 @@ api.put("/users/:id", adminOnly, wrap(async (req, res) => {
   }
   if (id === req.user.user_id && f.active === 0) throw bad("You cannot deactivate your own account.");
   await withTx(async (conn) => {
-    const [[role]] = await conn.query("SELECT role_id FROM role WHERE role_name = ?", [f.role]);
+    const { rows: [role] } = await conn.query("SELECT role_id FROM role WHERE role_name = ?", [f.role]);
     const sets = ["role_id=?", "username=?", "first_name=?", "last_name=?", "is_active=?"];
     const vals = [role.role_id, f.username, f.first, f.last, f.active];
     if (hash) {
       sets.push("password_hash=?");
       vals.push(hash);
     }
-    const [r] = await conn.query(`UPDATE users SET ${sets.join(", ")} WHERE user_id=?`, [...vals, id]);
-    if (!r.affectedRows) throw new HttpError(404, "User not found.");
+    const r = await conn.query(`UPDATE users SET ${sets.join(", ")} WHERE user_id=?`, [...vals, id]);
+    if (!r.rowCount) throw new HttpError(404, "User not found.");
     await assertAdminRemains(conn);
   });
   res.json({ ok: true });
@@ -301,8 +323,8 @@ api.delete("/users/:id", adminOnly, wrap(async (req, res) => {
   const id = idParam(req.params.id);
   if (id === req.user.user_id) throw bad("You cannot delete the account you are currently using.");
   await withTx(async (conn) => {
-    const [r] = await conn.query("DELETE FROM users WHERE user_id = ?", [id]);
-    if (!r.affectedRows) throw new HttpError(404, "User not found.");
+    const r = await conn.query("DELETE FROM users WHERE user_id = ?", [id]);
+    if (!r.rowCount) throw new HttpError(404, "User not found.");
     await assertAdminRemains(conn);
   });
   res.json({ ok: true });
@@ -314,17 +336,20 @@ api.delete("/users/:id", adminOnly, wrap(async (req, res) => {
 
 /* ---- Categories ---- */
 api.get("/categories", wrap(async (req, res) => {
-  const [rows] = await pool.query("SELECT category_id, category_name FROM category ORDER BY category_name");
+  const { rows } = await db.query("SELECT category_id, category_name FROM category ORDER BY category_name");
   res.json(rows);
 }));
 api.post("/categories", adminOnly, wrap(async (req, res) => {
   const name = text(req.body?.category_name, "Category name", 100);
-  const [r] = await pool.query("INSERT INTO category (category_name) VALUES (?)", [name]);
-  res.status(201).json({ category_id: r.insertId, category_name: name });
+  const { rows: [created] } = await db.query(
+    "INSERT INTO category (category_name) VALUES (?) RETURNING category_id",
+    [name],
+  );
+  res.status(201).json({ category_id: created.category_id, category_name: name });
 }));
 api.delete("/categories/:id", adminOnly, wrap(async (req, res) => {
-  const [r] = await pool.query("DELETE FROM category WHERE category_id = ?", [idParam(req.params.id)]);
-  if (!r.affectedRows) throw new HttpError(404, "Category not found.");
+  const r = await db.query("DELETE FROM category WHERE category_id = ?", [idParam(req.params.id)]);
+  if (!r.rowCount) throw new HttpError(404, "Category not found.");
   res.json({ ok: true });
 }));
 
@@ -338,7 +363,7 @@ const PRODUCT_SELECT = `SELECT p.product_id, p.category_id, c.category_name, p.p
   FROM product p JOIN category c ON c.category_id = p.category_id`;
 
 api.get("/products", wrap(async (req, res) => {
-  const [rows] = await pool.query(`${PRODUCT_SELECT} ORDER BY p.product_name`);
+  const { rows } = await db.query(`${PRODUCT_SELECT} ORDER BY p.product_name`);
   res.json(rows.map((p) => ({ ...p, status: statusOut(p.status) })));
 }));
 
@@ -357,19 +382,20 @@ api.post("/products", adminOnly, wrap(async (req, res) => {
   const f = productFields(req.body || {});
   const stock = integer(req.body.stock_quantity ?? 0, "Stock quantity");
   const id = await withTx(async (conn) => {
-    const [r] = await conn.query(
+    const { rows: [created] } = await conn.query(
       `INSERT INTO product (category_id, product_name, sku, unit_price, cost_price, reorder_level, stock_quantity, status)
-       VALUES (?,?,?,?,?,?,?, 'active')`,
+       VALUES (?,?,?,?,?,?,?, 'active') RETURNING product_id`,
       [f.category_id, f.name, f.sku, f.unit_price, f.cost_price, f.reorder_level, stock],
     );
+    const newId = created.product_id;
     if (stock > 0) {
       await conn.query(
         `INSERT INTO inventory_movement (product_id, user_id, movement_type, quantity, reference_number, remarks)
          VALUES (?,?, 'STOCK_IN', ?, ?, 'Initial stock')`,
-        [r.insertId, req.user.user_id, stock, `INITIAL-${r.insertId}`],
+        [newId, req.user.user_id, stock, `INITIAL-${newId}`],
       );
     }
-    return r.insertId;
+    return newId;
   });
   res.status(201).json({ product_id: id });
 }));
@@ -380,7 +406,7 @@ api.put("/products/:id", adminOnly, wrap(async (req, res) => {
   const stock = integer(req.body.stock_quantity, "Stock quantity");
   const status = statusIn(req.body.status);
   await withTx(async (conn) => {
-    const [[current]] = await conn.query("SELECT stock_quantity FROM product WHERE product_id = ? FOR UPDATE", [id]);
+    const { rows: [current] } = await conn.query("SELECT stock_quantity FROM product WHERE product_id = ? FOR UPDATE", [id]);
     if (!current) throw new HttpError(404, "Product not found.");
     await conn.query(
       `UPDATE product SET category_id=?, product_name=?, sku=?, unit_price=?, cost_price=?, reorder_level=?,
@@ -402,12 +428,12 @@ api.put("/products/:id", adminOnly, wrap(async (req, res) => {
 api.delete("/products/:id", adminOnly, wrap(async (req, res) => {
   const id = idParam(req.params.id);
   await withTx(async (conn) => {
-    const [[sold]] = await conn.query("SELECT COUNT(*) AS n FROM sale_item WHERE product_id = ?", [id]);
+    const { rows: [sold] } = await conn.query("SELECT COUNT(*) AS n FROM sale_item WHERE product_id = ?", [id]);
     if (sold.n > 0)
       throw new HttpError(409, "This product has sales history and cannot be deleted. Set it to Inactive instead.");
     await conn.query("DELETE FROM inventory_movement WHERE product_id = ?", [id]);
-    const [r] = await conn.query("DELETE FROM product WHERE product_id = ?", [id]);
-    if (!r.affectedRows) throw new HttpError(404, "Product not found.");
+    const r = await conn.query("DELETE FROM product WHERE product_id = ?", [id]);
+    if (!r.rowCount) throw new HttpError(404, "Product not found.");
   });
   res.json({ ok: true });
 }));
@@ -418,7 +444,7 @@ api.delete("/products/:id", adminOnly, wrap(async (req, res) => {
 
 /* ---- Suppliers ---- */
 api.get("/suppliers", adminOnly, wrap(async (req, res) => {
-  const [rows] = await pool.query(
+  const { rows } = await db.query(
     "SELECT supplier_id, supplier_name, contact_number, email, address FROM supplier ORDER BY supplier_id",
   );
   res.json(rows);
@@ -426,20 +452,20 @@ api.get("/suppliers", adminOnly, wrap(async (req, res) => {
 api.post("/suppliers", adminOnly, wrap(async (req, res) => {
   const b = req.body || {};
   const name = text(b.supplier_name, "Supplier name", 50);
-  const [dup] = await pool.query("SELECT 1 FROM supplier WHERE LOWER(supplier_name) = LOWER(?)", [name]);
-  if (dup.length) throw new HttpError(409, "That supplier already exists.");
-  const [r] = await pool.query(
-    "INSERT INTO supplier (supplier_name, contact_number, email, address) VALUES (?,?,?,?)",
+  const dup = await db.query("SELECT 1 FROM supplier WHERE LOWER(supplier_name) = LOWER(?)", [name]);
+  if (dup.rowCount) throw new HttpError(409, "That supplier already exists.");
+  const { rows: [created] } = await db.query(
+    "INSERT INTO supplier (supplier_name, contact_number, email, address) VALUES (?,?,?,?) RETURNING supplier_id",
     [name, text(b.contact_number, "Contact number", 30, false), text(b.email, "Email", 50, false), text(b.address, "Address", 80, false)],
   );
-  res.status(201).json({ supplier_id: r.insertId });
+  res.status(201).json({ supplier_id: created.supplier_id });
 }));
 api.delete("/suppliers/:id", adminOnly, wrap(async (req, res) => {
   const id = idParam(req.params.id);
   await withTx(async (conn) => {
     await conn.query("DELETE FROM product_supplier WHERE supplier_id = ?", [id]);
-    const [r] = await conn.query("DELETE FROM supplier WHERE supplier_id = ?", [id]);
-    if (!r.affectedRows) throw new HttpError(404, "Supplier not found.");
+    const r = await conn.query("DELETE FROM supplier WHERE supplier_id = ?", [id]);
+    if (!r.rowCount) throw new HttpError(404, "Supplier not found.");
   });
   res.json({ ok: true });
 }));
@@ -450,7 +476,7 @@ api.delete("/suppliers/:id", adminOnly, wrap(async (req, res) => {
 
 /* ---- Product suppliers ---- */
 api.get("/product-suppliers", adminOnly, wrap(async (req, res) => {
-  const [rows] = await pool.query(
+  const { rows } = await db.query(
     `SELECT ps.product_id, p.product_name, ps.supplier_id, s.supplier_name, ps.supplier_product_code, ps.supply_price
      FROM product_supplier ps
      JOIN product p ON p.product_id = ps.product_id
@@ -471,12 +497,12 @@ const DUP_PS = "That product is already linked to this supplier.";
 api.post("/product-suppliers", adminOnly, wrap(async (req, res) => {
   const [pid, sid, code, price] = psFields(req.body || {});
   try {
-    await pool.query(
+    await db.query(
       "INSERT INTO product_supplier (product_id, supplier_id, supplier_product_code, supply_price) VALUES (?,?,?,?)",
       [pid, sid, code, price],
     );
   } catch (e) {
-    if (e.code === "ER_DUP_ENTRY") throw new HttpError(409, DUP_PS);
+    if (e.code === "23505") throw new HttpError(409, DUP_PS);
     throw e;
   }
   res.status(201).json({ ok: true });
@@ -484,24 +510,24 @@ api.post("/product-suppliers", adminOnly, wrap(async (req, res) => {
 api.put("/product-suppliers/:productId/:supplierId", adminOnly, wrap(async (req, res) => {
   const [pid, sid, code, price] = psFields(req.body || {});
   try {
-    const [r] = await pool.query(
+    const r = await db.query(
       `UPDATE product_supplier SET product_id=?, supplier_id=?, supplier_product_code=?, supply_price=?
        WHERE product_id=? AND supplier_id=?`,
       [pid, sid, code, price, idParam(req.params.productId), idParam(req.params.supplierId)],
     );
-    if (!r.affectedRows) throw new HttpError(404, "Link not found.");
+    if (!r.rowCount) throw new HttpError(404, "Link not found.");
   } catch (e) {
-    if (e.code === "ER_DUP_ENTRY") throw new HttpError(409, DUP_PS);
+    if (e.code === "23505") throw new HttpError(409, DUP_PS);
     throw e;
   }
   res.json({ ok: true });
 }));
 api.delete("/product-suppliers/:productId/:supplierId", adminOnly, wrap(async (req, res) => {
-  const [r] = await pool.query("DELETE FROM product_supplier WHERE product_id=? AND supplier_id=?", [
+  const r = await db.query("DELETE FROM product_supplier WHERE product_id=? AND supplier_id=?", [
     idParam(req.params.productId),
     idParam(req.params.supplierId),
   ]);
-  if (!r.affectedRows) throw new HttpError(404, "Link not found.");
+  if (!r.rowCount) throw new HttpError(404, "Link not found.");
   res.json({ ok: true });
 }));
 
@@ -511,7 +537,7 @@ api.delete("/product-suppliers/:productId/:supplierId", adminOnly, wrap(async (r
 
 /* ---- Inventory movements ---- */
 api.get("/movements", adminOnly, wrap(async (req, res) => {
-  const [rows] = await pool.query(
+  const { rows } = await db.query(
     `SELECT m.movement_id, m.product_id, p.product_name, m.user_id,
             CONCAT(u.first_name, ' ', u.last_name) AS user_name,
             m.movement_type, m.quantity, m.movement_date, m.reference_number, m.remarks
@@ -532,7 +558,7 @@ api.post("/movements", adminOnly, wrap(async (req, res) => {
   const ref = text(b.reference_number, "Reference", 100, false);
   const remarks = text(b.remarks, "Remarks", 255, false);
   await withTx(async (conn) => {
-    const [[p]] = await conn.query("SELECT stock_quantity FROM product WHERE product_id = ? FOR UPDATE", [productId]);
+    const { rows: [p] } = await conn.query("SELECT stock_quantity FROM product WHERE product_id = ? FOR UPDATE", [productId]);
     if (!p) throw new HttpError(404, "Product not found.");
     const delta = type === "STOCK_OUT" ? -qty : qty;
     if (p.stock_quantity + delta < 0) throw bad(`Only ${p.stock_quantity} units are in stock.`);
@@ -552,12 +578,12 @@ api.post("/movements", adminOnly, wrap(async (req, res) => {
 
 // History only: these do not change product stock.
 api.delete("/movements/:id", adminOnly, wrap(async (req, res) => {
-  const [r] = await pool.query("DELETE FROM inventory_movement WHERE movement_id = ?", [idParam(req.params.id)]);
-  if (!r.affectedRows) throw new HttpError(404, "Movement not found.");
+  const r = await db.query("DELETE FROM inventory_movement WHERE movement_id = ?", [idParam(req.params.id)]);
+  if (!r.rowCount) throw new HttpError(404, "Movement not found.");
   res.json({ ok: true });
 }));
 api.delete("/movements", adminOnly, wrap(async (req, res) => {
-  await pool.query("DELETE FROM inventory_movement");
+  await db.query("DELETE FROM inventory_movement");
   res.json({ ok: true });
 }));
 
@@ -574,8 +600,8 @@ api.post("/sales", staffOnly, wrap(async (req, res) => {
   const ids = [...wanted.keys()].sort((a, b) => a - b);
 
   const result = await withTx(async (conn) => {
-    const [products] = await conn.query(
-      "SELECT product_id, product_name, unit_price, stock_quantity, status FROM product WHERE product_id IN (?) ORDER BY product_id FOR UPDATE",
+    const { rows: products } = await conn.query(
+      "SELECT product_id, product_name, unit_price, stock_quantity, status FROM product WHERE product_id = ANY(?) ORDER BY product_id FOR UPDATE",
       [ids],
     );
     const byId = new Map(products.map((p) => [p.product_id, p]));
@@ -588,17 +614,17 @@ api.post("/sales", staffOnly, wrap(async (req, res) => {
         throw new HttpError(409, `Not enough stock for ${p.product_name}. Only ${p.stock_quantity} left.`);
       total += Math.round(qty * p.unit_price * 100) / 100;
     }
-    const [sale] = await conn.query("INSERT INTO sale (user_id, discount, total_amount) VALUES (?, 0, ?)", [
-      req.user.user_id,
-      total,
-    ]);
-    const reference = `SALE-${String(sale.insertId).padStart(3, "0")}`;
+    const { rows: [sale] } = await conn.query(
+      "INSERT INTO sale (user_id, discount, total_amount) VALUES (?, 0, ?) RETURNING sale_id",
+      [req.user.user_id, total],
+    );
+    const reference = `SALE-${String(sale.sale_id).padStart(3, "0")}`;
     for (const id of ids) {
       const p = byId.get(id);
       const qty = wanted.get(id);
       await conn.query(
         "INSERT INTO sale_item (sale_id, product_id, quantity, unit_price, discount, subtotal) VALUES (?,?,?,?,0,?)",
-        [sale.insertId, id, qty, p.unit_price, Math.round(qty * p.unit_price * 100) / 100],
+        [sale.sale_id, id, qty, p.unit_price, Math.round(qty * p.unit_price * 100) / 100],
       );
       await conn.query("UPDATE product SET stock_quantity = stock_quantity - ? WHERE product_id = ?", [qty, id]);
       await conn.query(
@@ -607,13 +633,13 @@ api.post("/sales", staffOnly, wrap(async (req, res) => {
         [id, req.user.user_id, qty, reference],
       );
     }
-    return { sale_id: sale.insertId, reference, total };
+    return { sale_id: sale.sale_id, reference, total };
   });
   res.status(201).json(result);
 }));
 
 api.get("/sales/items", requireRole("Admin", "Staff"), wrap(async (req, res) => {
-  const [rows] = await pool.query(
+  const { rows } = await db.query(
     `SELECT si.sale_id, si.product_id, p.product_name, si.quantity, si.unit_price, si.discount, si.subtotal
      FROM sale_item si JOIN product p ON p.product_id = si.product_id
      ORDER BY si.sale_id DESC, p.product_name`,
@@ -627,15 +653,15 @@ api.get("/sales/items", requireRole("Admin", "Staff"), wrap(async (req, res) => 
 
 // History only: these do not change stock or sales totals.
 api.delete("/sales/items/:saleId/:productId", staffOnly, wrap(async (req, res) => {
-  const [r] = await pool.query("DELETE FROM sale_item WHERE sale_id=? AND product_id=?", [
+  const r = await db.query("DELETE FROM sale_item WHERE sale_id=? AND product_id=?", [
     idParam(req.params.saleId),
     idParam(req.params.productId),
   ]);
-  if (!r.affectedRows) throw new HttpError(404, "Sale item not found.");
+  if (!r.rowCount) throw new HttpError(404, "Sale item not found.");
   res.json({ ok: true });
 }));
 api.delete("/sales/items", staffOnly, wrap(async (req, res) => {
-  await pool.query("DELETE FROM sale_item");
+  await db.query("DELETE FROM sale_item");
   res.json({ ok: true });
 }));
 
@@ -646,37 +672,37 @@ api.delete("/sales/items", staffOnly, wrap(async (req, res) => {
 
 /* ---- Dashboard ---- */
 async function resetThroughId() {
-  const [rows] = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = ?", [RESET_KEY]);
+  const { rows } = await db.query("SELECT setting_value FROM app_settings WHERE setting_key = ?", [RESET_KEY]);
   return rows.length ? Number(rows[0].setting_value) || 0 : 0;
 }
 
 api.get("/dashboard", adminOnly, wrap(async (req, res) => {
   const resetId = await resetThroughId();
-  const [[counts]] = await pool.query(
+  const { rows: [counts] } = await db.query(
     `SELECT (SELECT COUNT(*) FROM product) AS products,
             (SELECT COUNT(*) FROM inventory_movement) AS movements,
             (SELECT COUNT(*) FROM product WHERE stock_quantity <= reorder_level) AS low_stock`,
   );
-  const [[sales]] = await pool.query(
+  const { rows: [sales] } = await db.query(
     "SELECT COALESCE(SUM(total_amount), 0) AS total FROM sale WHERE sale_id > ?",
     [resetId],
   );
-  const [recent] = await pool.query(
+  const { rows: recent } = await db.query(
     `SELECT m.movement_id, p.product_name, m.movement_type, m.quantity, m.movement_date
      FROM inventory_movement m JOIN product p ON p.product_id = m.product_id
      ORDER BY m.movement_id DESC LIMIT 5`,
   );
-  const [stock] = await pool.query(
+  const { rows: stock } = await db.query(
     "SELECT product_id, product_name, stock_quantity, reorder_level FROM product ORDER BY product_name",
   );
   res.json({ ...counts, total_sales: sales.total, recent_movements: recent, stock_overview: stock });
 }));
 
 api.post("/dashboard/reset-sales", adminOnly, wrap(async (req, res) => {
-  const [[{ maxId }]] = await pool.query("SELECT COALESCE(MAX(sale_id), 0) AS maxId FROM sale");
-  await pool.query(
-    "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
-    [RESET_KEY, String(maxId)],
+  const { rows: [{ max_id }] } = await db.query("SELECT COALESCE(MAX(sale_id), 0) AS max_id FROM sale");
+  await db.query(
+    "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value",
+    [RESET_KEY, String(max_id)],
   );
   res.json({ ok: true });
 }));
@@ -699,20 +725,22 @@ app.get("/", (req, res) => res.redirect("/login.html"));
 app.use((err, req, res, next) => {
   if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid request body." });
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
-  if (err.code === "ER_DUP_ENTRY") {
-    const m = String(err.sqlMessage || "");
+  if (err.code === "23505") {
+    // unique_violation
+    const c = String(err.constraint || "");
     let msg = "That record already exists.";
-    if (/sku/.test(m)) msg = "That SKU already exists. Please use a unique SKU.";
-    else if (m.includes("username")) msg = "That username is already in use.";
-    else if (m.includes("category_name")) msg = "That category already exists.";
+    if (c.includes("sku")) msg = "That SKU already exists. Please use a unique SKU.";
+    else if (c.includes("username")) msg = "That username is already in use.";
+    else if (c.includes("category_name")) msg = "That category already exists.";
     return res.status(409).json({ error: msg });
   }
-  if (err.code === "ER_ROW_IS_REFERENCED_2" || err.errno === 1451) {
-    return res.status(409).json({
-      error: "This record is used by other records (for example sales, movements or products) and cannot be deleted.",
-    });
-  }
-  if (err.code === "ER_NO_REFERENCED_ROW_2" || err.errno === 1452) {
+  if (err.code === "23503") {
+    // foreign_key_violation. "update or delete on table ..." means another table still references this row.
+    if (/^update or delete on table/.test(String(err.message))) {
+      return res.status(409).json({
+        error: "This record is used by other records (for example sales, movements or products) and cannot be deleted.",
+      });
+    }
     return res.status(400).json({ error: "A selected product, category or supplier no longer exists." });
   }
   console.error(err);
@@ -723,11 +751,11 @@ initDatabase()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`VBizStock is running at http://localhost:${PORT}`);
-      console.log(`Connected to MySQL database "${DB_NAME}" on ${DB_CONFIG.host}:${DB_CONFIG.port}`);
+      console.log(`Connected to PostgreSQL database "${DB_NAME}" on ${DB_CONFIG.host}:${DB_CONFIG.port}`);
     });
   })
   .catch((error) => {
-    console.error("\nCould not connect to MySQL. In Laragon, click 'Start All' first, then check the DB_* values in .env.");
+    console.error("\nCould not connect to PostgreSQL. Make sure the server is running, then check the DB_* values in .env.");
     console.error(error.message);
     process.exit(1);
   });
